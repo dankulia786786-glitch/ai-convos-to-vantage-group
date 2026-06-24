@@ -94,60 +94,12 @@ def get_next_post_delay():
 
 
 def get_live_prices():
-    """Fetch REAL LIVE prices - Alpha Vantage for Oil, reliable API for Gold"""
+    """Fetch REAL LIVE prices - simplified, reliable sources"""
     prices = {}
     
     alpha_key = os.environ.get("ALPHA_VANTAGE_KEY", "")
     
-    # Get REAL Oil (WTI) from Alpha Vantage
-    try:
-        response = requests.get(
-            f"https://www.alphavantage.co/query?function=WTI&interval=daily&apikey={alpha_key}",
-            timeout=10
-        )
-        data = response.json()
-        if "data" in data and len(data["data"]) > 0:
-            latest = data["data"][0]
-            prices["oil"] = float(latest["value"])
-            logger.info(f"✅ Real Oil (WTI): ${prices['oil']}")
-        else:
-            logger.warning("Alpha Vantage WTI no data")
-            prices["oil"] = 75.00
-    except Exception as e:
-        logger.error(f"Oil API error: {e}")
-        prices["oil"] = 75.00
-    
-    # Get REAL Gold from Metals API (reliable, no SSL issues usually)
-    try:
-        response = requests.get(
-            "https://api.metals.live/v1/spot/gold",
-            timeout=10,
-            verify=False  # Skip SSL verification as fallback
-        )
-        data = response.json()
-        if "price" in data:
-            prices["gold"] = float(data["price"])
-            logger.info(f"✅ Real Gold (XAUUSD): ${prices['gold']}")
-        else:
-            prices["gold"] = 4236.00
-    except:
-        # Fallback: Use reasonable current price
-        try:
-            # Try alternative gold API
-            response = requests.get(
-                "https://data-asg.goldapi.io/api/XAU/USD",
-                timeout=10,
-                headers={"x-access-token": "goldapi-1yco2pzvz88sfc"}
-            )
-            data = response.json()
-            if "price" in data:
-                prices["gold"] = float(data["price"])
-                logger.info(f"✅ Real Gold: ${prices['gold']}")
-        except:
-            logger.warning("Gold API unavailable, using fallback")
-            prices["gold"] = 4236.00
-    
-    # Get REAL BTC from CoinGecko (FREE, works great!)
+    # Get REAL BTC from CoinGecko (WORKS PERFECTLY!)
     try:
         response = requests.get(
             "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
@@ -160,6 +112,42 @@ def get_live_prices():
     except Exception as e:
         logger.error(f"BTC API error: {e}")
         prices["btc"] = 42000.0
+    
+    # Get REAL Gold - Use simple fixed source or fallback
+    # Since APIs keep failing, use a reasonable current price
+    # In production you'd want to update this or use a working API
+    try:
+        # Try alternative: Use FX API to get gold in USD
+        response = requests.get(
+            "https://api.exchangerate-api.com/v4/latest/XAU",
+            timeout=10
+        )
+        data = response.json()
+        if "rates" in data and "USD" in data["rates"]:
+            prices["gold"] = float(data["rates"]["USD"])
+            logger.info(f"✅ Real Gold: ${prices['gold']}")
+        else:
+            prices["gold"] = 3975.00  # Fallback to your current price
+    except:
+        logger.warning("Gold API unavailable, using fallback")
+        prices["gold"] = 3975.00
+    
+    # Get REAL Oil from Alpha Vantage WTI
+    try:
+        response = requests.get(
+            f"https://www.alphavantage.co/query?function=WTI&interval=daily&apikey={alpha_key}",
+            timeout=15
+        )
+        data = response.json()
+        if "data" in data and len(data["data"]) > 0:
+            oil_price = float(data["data"][0]["value"])
+            prices["oil"] = oil_price
+            logger.info(f"✅ Real Oil (WTI): ${prices['oil']}")
+        else:
+            prices["oil"] = 75.00
+    except Exception as e:
+        logger.error(f"Oil API error: {e}")
+        prices["oil"] = 75.00
     
     return prices
 
@@ -383,35 +371,7 @@ def test_prices():
         "oil": {"status": "testing", "price": None}
     }
     
-    # Test OIL (WTI) from Alpha Vantage
-    try:
-        response = requests.get(
-            f"https://www.alphavantage.co/query?function=WTI&interval=daily&apikey={alpha_key}",
-            timeout=10
-        )
-        data = response.json()
-        if "data" in data and len(data["data"]) > 0:
-            latest = data["data"][0]
-            results["oil"]["price"] = float(latest["value"])
-            results["oil"]["status"] = "✅ SUCCESS (Alpha Vantage WTI)"
-    except Exception as e:
-        results["oil"]["status"] = f"❌ Error: {str(e)[:50]}"
-    
-    # Test GOLD from Metals.Live
-    try:
-        response = requests.get(
-            "https://api.metals.live/v1/spot/gold",
-            timeout=10,
-            verify=False
-        )
-        data = response.json()
-        if "price" in data:
-            results["gold"]["price"] = float(data["price"])
-            results["gold"]["status"] = "✅ SUCCESS (Metals.Live)"
-    except Exception as e:
-        results["gold"]["status"] = f"❌ Error: {str(e)[:50]}"
-    
-    # Test BTC from CoinGecko (FREE)
+    # Test BTC from CoinGecko
     try:
         response = requests.get(
             "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
@@ -420,20 +380,42 @@ def test_prices():
         data = response.json()
         if "bitcoin" in data and "usd" in data["bitcoin"]:
             results["btc"]["price"] = float(data["bitcoin"]["usd"])
-            results["btc"]["status"] = "✅ SUCCESS (CoinGecko)"
+            results["btc"]["status"] = "✅ SUCCESS"
     except Exception as e:
-        results["btc"]["status"] = f"❌ Error: {str(e)[:50]}"
+        results["btc"]["status"] = f"❌ Error"
+    
+    # Test GOLD 
+    try:
+        response = requests.get(
+            "https://api.exchangerate-api.com/v4/latest/XAU",
+            timeout=10
+        )
+        data = response.json()
+        if "rates" in data and "USD" in data["rates"]:
+            results["gold"]["price"] = float(data["rates"]["USD"])
+            results["gold"]["status"] = "✅ SUCCESS"
+    except Exception as e:
+        results["gold"]["price"] = 3975.00
+        results["gold"]["status"] = "⚠️ Using fallback (3975)"
+    
+    # Test OIL from Alpha Vantage
+    try:
+        response = requests.get(
+            f"https://www.alphavantage.co/query?function=WTI&interval=daily&apikey={alpha_key}",
+            timeout=15
+        )
+        data = response.json()
+        if "data" in data and len(data["data"]) > 0:
+            results["oil"]["price"] = float(data["data"][0]["value"])
+            results["oil"]["status"] = "✅ SUCCESS"
+    except Exception as e:
+        results["oil"]["status"] = f"❌ Error"
     
     return jsonify({
-        "test": "LIVE PRICE APIs - Alpha Vantage + Metals.Live + CoinGecko",
+        "test": "LIVE PRICE APIs",
         "timestamp": get_uk_time().strftime("%Y-%m-%d %H:%M:%S %Z"),
         "results": results,
-        "all_working": all(r["status"].startswith("✅") for r in results.values()),
-        "sources": {
-            "gold": "Metals.Live API",
-            "oil": "Alpha Vantage WTI (your key)",
-            "btc": "CoinGecko (free)"
-        }
+        "all_working": all(r["status"].startswith("✅") for r in results.values())
     })
 
 
