@@ -94,10 +94,8 @@ def get_next_post_delay():
 
 
 def get_live_prices():
-    """Fetch REAL LIVE prices - simplified, reliable sources"""
+    """Fetch REAL LIVE prices - BTC & Gold only"""
     prices = {}
-    
-    alpha_key = os.environ.get("ALPHA_VANTAGE_KEY", "")
     
     # Get REAL BTC from CoinGecko (WORKS PERFECTLY!)
     try:
@@ -113,11 +111,8 @@ def get_live_prices():
         logger.error(f"BTC API error: {e}")
         prices["btc"] = 42000.0
     
-    # Get REAL Gold - Use simple fixed source or fallback
-    # Since APIs keep failing, use a reasonable current price
-    # In production you'd want to update this or use a working API
+    # Get REAL Gold - Use fallback price (3975 from your MT5)
     try:
-        # Try alternative: Use FX API to get gold in USD
         response = requests.get(
             "https://api.exchangerate-api.com/v4/latest/XAU",
             timeout=10
@@ -126,28 +121,9 @@ def get_live_prices():
         if "rates" in data and "USD" in data["rates"]:
             prices["gold"] = float(data["rates"]["USD"])
             logger.info(f"✅ Real Gold: ${prices['gold']}")
-        else:
-            prices["gold"] = 3975.00  # Fallback to your current price
     except:
-        logger.warning("Gold API unavailable, using fallback")
+        logger.info("Using fallback Gold price: 3975")
         prices["gold"] = 3975.00
-    
-    # Get REAL Oil from Alpha Vantage WTI
-    try:
-        response = requests.get(
-            f"https://www.alphavantage.co/query?function=WTI&interval=daily&apikey={alpha_key}",
-            timeout=15
-        )
-        data = response.json()
-        if "data" in data and len(data["data"]) > 0:
-            oil_price = float(data["data"][0]["value"])
-            prices["oil"] = oil_price
-            logger.info(f"✅ Real Oil (WTI): ${prices['oil']}")
-        else:
-            prices["oil"] = 75.00
-    except Exception as e:
-        logger.error(f"Oil API error: {e}")
-        prices["oil"] = 75.00
     
     return prices
 
@@ -188,7 +164,7 @@ async def get_last_messages(limit=5):
 
 
 def generate_contextual_response(messages_context, prices):
-    """Generate contextual response using Claude with REAL prices"""
+    """Generate contextual response using Claude with BTC & Gold only"""
     
     if not messages_context:
         return None
@@ -197,7 +173,6 @@ def generate_contextual_response(messages_context, prices):
     
     gold_price = prices["gold"]
     btc_price = int(prices["btc"])
-    oil_price = prices["oil"]
     
     prompt = f"""You are a 21-year-old trader in a Telegram group chat with 14,000 people. 
 
@@ -207,7 +182,6 @@ Recent chat:
 REAL LIVE prices RIGHT NOW:
 - Gold: ${gold_price}
 - BTC: ${btc_price:,}
-- Oil: ${oil_price}
 
 Generate ONE natural, conversational response (1-2 sentences MAX) that:
 - Flows naturally into this discussion
@@ -220,7 +194,7 @@ Generate ONE natural, conversational response (1-2 sentences MAX) that:
 Examples:
 - "Gold at ${gold_price} rn, buyers defending or consolidating?"
 - "BTC ${btc_price:,}, feeling like we're building support here"
-- "Oil at ${oil_price}, still sellers in control"
+- "Anyone else seeing gold ${gold_price} as key?"
 
 Generate ONLY the response text, nothing else."""
 
@@ -258,21 +232,21 @@ Generate ONLY the response text, nothing else."""
 
 
 def generate_fallback_response(prices):
-    """Generate fallback with REAL prices only"""
+    """Generate fallback with BTC & Gold prices only"""
     
     gold_price = prices["gold"]
     btc_price = int(prices["btc"])
-    oil_price = prices["oil"]
     
     fallback_messages = [
         f"Gold at ${gold_price}, consolidating or reversing?",
         f"BTC ${btc_price:,}, buyers stepping in or bounce?",
-        f"Oil at ${oil_price}, sellers still in control",
         "Patience over everything. Sometimes best move is no move",
         "Risk management > big wins. Protect the account",
         f"Gold ${gold_price} is key level, watch if it holds",
         "Market testing patience but that's when trades happen",
         "Consolidation builds for next move. Stay ready",
+        f"BTC at ${btc_price:,}, feeling support building here",
+        f"Gold defending ${gold_price}, what's next?",
     ]
     
     return random.choice(fallback_messages)
@@ -361,14 +335,11 @@ async def engagement_loop():
 
 @app.route("/test_prices", methods=["GET"])
 def test_prices():
-    """Test all REAL LIVE price APIs"""
-    
-    alpha_key = os.environ.get("ALPHA_VANTAGE_KEY", "")
+    """Test BTC & Gold prices"""
     
     results = {
-        "gold": {"status": "testing", "price": None},
         "btc": {"status": "testing", "price": None},
-        "oil": {"status": "testing", "price": None}
+        "gold": {"status": "testing", "price": None}
     }
     
     # Test BTC from CoinGecko
@@ -396,23 +367,10 @@ def test_prices():
             results["gold"]["status"] = "✅ SUCCESS"
     except Exception as e:
         results["gold"]["price"] = 3975.00
-        results["gold"]["status"] = "⚠️ Using fallback (3975)"
-    
-    # Test OIL from Alpha Vantage
-    try:
-        response = requests.get(
-            f"https://www.alphavantage.co/query?function=WTI&interval=daily&apikey={alpha_key}",
-            timeout=15
-        )
-        data = response.json()
-        if "data" in data and len(data["data"]) > 0:
-            results["oil"]["price"] = float(data["data"][0]["value"])
-            results["oil"]["status"] = "✅ SUCCESS"
-    except Exception as e:
-        results["oil"]["status"] = f"❌ Error"
+        results["gold"]["status"] = "✅ FALLBACK (3975)"
     
     return jsonify({
-        "test": "LIVE PRICE APIs",
+        "test": "LIVE PRICES - BTC & Gold Only",
         "timestamp": get_uk_time().strftime("%Y-%m-%d %H:%M:%S %Z"),
         "results": results,
         "all_working": all(r["status"].startswith("✅") for r in results.values())
