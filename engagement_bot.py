@@ -290,38 +290,24 @@ def generate_fallback_response(prices):
     return random.choice(fallback_messages)
 
 
-async def send_to_vantage(message_text, chart_image=None, reply_to=None):
-    """Send message to Vantage group - text or image"""
-    global client, last_posted_time
-    
-    if not ENABLE_GROUP_SEND:
-        logger.warning("Group sending is locked")
-        return None
-
-    if not VANTAGE_GROUP_ID:
-        logger.error("VANTAGE_GROUP_ID missing")
-        return None
-
-    # Default reply_to to TOPIC_ID if not provided
-    if reply_to is None and VANTAGE_TOPIC_ID and int(VANTAGE_TOPIC_ID) > 0:
-        reply_to = int(VANTAGE_TOPIC_ID)
+async def send_message_to_entity(entity_target, message_text, chart_image=None, reply_to=None):
+    """EXACT COPY FROM WORKING CODE - charlie-vantage-forwarder"""
+    global client
 
     try:
         if not client or not await client.is_user_authorized():
             logger.error("Not logged in")
             return None
 
-        # Get entity
-        entity = await client.get_entity(int(VANTAGE_GROUP_ID))
-        
+        entity = await client.get_entity(entity_target)
+
         kwargs = {
             "parse_mode": "md"
         }
 
         if reply_to:
-            kwargs["reply_to"] = int(reply_to)
+            kwargs["reply_to"] = reply_to
 
-        # Send message or file
         if chart_image:
             sent = await client.send_file(
                 entity,
@@ -337,16 +323,34 @@ async def send_to_vantage(message_text, chart_image=None, reply_to=None):
                 **kwargs
             )
 
-        last_posted_time = time.time()
-        logger.info(f"✅ Message sent to Vantage! ID: {sent.id if hasattr(sent, 'id') else 'unknown'}")
+        logger.info("Message sent")
         return sent
 
     except Exception as e:
         logger.error(f"Send error: {e}")
-        logger.error(f"Full error: {str(e)}")
-        import traceback
-        logger.error(traceback.format_exc())
         return None
+
+
+async def send_to_vantage(message_text, chart_image=None, reply_to=None):
+    """EXACT COPY FROM WORKING CODE - charlie-vantage-forwarder"""
+    if not ENABLE_GROUP_SEND:
+        logger.warning("Group sending is locked")
+        return None
+
+    if not VANTAGE_GROUP_ID:
+        logger.error("VANTAGE_GROUP_ID missing")
+        return None
+
+    if chart_image is None and reply_to is None:
+        logger.error("Chart image missing. Refusing to send fresh group update.")
+        return None
+
+    return await send_message_to_entity(
+        VANTAGE_GROUP_ID,
+        message_text,
+        chart_image=chart_image,
+        reply_to=reply_to if reply_to else VANTAGE_TOPIC_ID if VANTAGE_TOPIC_ID and VANTAGE_TOPIC_ID > 0 else None
+    )
 
 
 async def engagement_loop():
@@ -396,7 +400,7 @@ async def engagement_loop():
             sent = await send_to_vantage(
                 response,
                 chart_image=None,
-                reply_to=VANTAGE_TOPIC_ID if VANTAGE_TOPIC_ID and int(VANTAGE_TOPIC_ID) > 0 else None
+                reply_to=VANTAGE_TOPIC_ID
             )
             
             if sent:
@@ -527,11 +531,11 @@ def test_post_now():
         else:
             response = generate_fallback_response(prices)
         
-        # Send with reply_to=TOPIC_ID
+        # Pass reply_to since no chart_image
         sent = await send_to_vantage(
             response,
             chart_image=None,
-            reply_to=VANTAGE_TOPIC_ID if VANTAGE_TOPIC_ID and int(VANTAGE_TOPIC_ID) > 0 else None
+            reply_to=VANTAGE_TOPIC_ID
         )
         
         return {
