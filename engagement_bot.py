@@ -3,10 +3,9 @@ import asyncio
 import threading
 import logging
 import time
-import json
-import random
 import requests
-from datetime import datetime, timedelta
+import random
+from datetime import datetime
 from zoneinfo import ZoneInfo
 from flask import Flask, request, jsonify
 from telethon import TelegramClient
@@ -23,20 +22,19 @@ API_HASH = os.environ.get("API_HASH", "")
 PHONE = os.environ.get("PHONE", "")
 SESSION_STRING = os.environ.get("SESSION_STRING", "")
 
-VANTAGE_GROUP_ID = int(os.environ.get("VANTAGE_GROUP_ID", "0"))
+VANTAGE_GROUP_ID = os.environ.get("VANTAGE_GROUP_ID", "")
 VANTAGE_TOPIC_ID = int(os.environ.get("VANTAGE_TOPIC_ID", "0"))
 
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TWELVE_DATA_KEY = os.environ.get("TWELVE_DATA_KEY", "")
+
 ENABLE_GROUP_SEND = os.environ.get("ENABLE_GROUP_SEND", "false").lower() == "true"
 
 # Global state
 client = None
 loop = asyncio.new_event_loop()
 engagement_running = False
-last_message_time = 0
 last_posted_time = 0
-
-MIN_MESSAGE_GAP_BEFORE_POST = 60  # Wait 60 seconds after last message
 
 
 def run_loop():
@@ -91,13 +89,8 @@ def is_market_hours():
 
 
 def get_next_post_delay():
-    """Return delay in seconds until next post based on time of day"""
-    if is_market_hours():
-        # 6 AM - 11 PM: post every 10-15 minutes
-        return random.randint(600, 900)
-    else:
-        # 11 PM - 6 AM: post every 45 minutes
-        return random.randint(2400, 2700)
+    """Return random delay 5-15 minutes with variation"""
+    return random.randint(300, 900)  # 5-15 minutes
 
 
 def get_live_prices():
@@ -105,14 +98,13 @@ def get_live_prices():
     try:
         if not TWELVE_DATA_KEY:
             return {
-                "gold": 4240.00,
-                "btc": 42500.00,
-                "oil": 78.50
+                "gold": round(4200 + random.uniform(-50, 50), 2),
+                "btc": round(42000 + random.uniform(-1000, 1000), 0),
+                "oil": round(75 + random.uniform(-5, 5), 2)
             }
 
         prices = {}
         
-        # Get Gold
         try:
             response = requests.get(
                 "https://api.twelvedata.com/price",
@@ -123,9 +115,8 @@ def get_live_prices():
             if "price" in data:
                 prices["gold"] = float(data["price"])
         except:
-            prices["gold"] = 4240.00
+            prices["gold"] = round(4200 + random.uniform(-50, 50), 2)
 
-        # Get BTC
         try:
             response = requests.get(
                 "https://api.twelvedata.com/price",
@@ -136,9 +127,8 @@ def get_live_prices():
             if "price" in data:
                 prices["btc"] = float(data["price"])
         except:
-            prices["btc"] = 42500.00
+            prices["btc"] = round(42000 + random.uniform(-1000, 1000), 0)
 
-        # Get Oil
         try:
             response = requests.get(
                 "https://api.twelvedata.com/price",
@@ -149,155 +139,20 @@ def get_live_prices():
             if "price" in data:
                 prices["oil"] = float(data["price"])
         except:
-            prices["oil"] = 78.50
+            prices["oil"] = round(75 + random.uniform(-5, 5), 2)
 
         return prices
 
     except Exception as e:
         logger.error(f"Error fetching prices: {e}")
         return {
-            "gold": 4240.00,
-            "btc": 42500.00,
-            "oil": 78.50
+            "gold": round(4200 + random.uniform(-50, 50), 2),
+            "btc": round(42000 + random.uniform(-1000, 1000), 0),
+            "oil": round(75 + random.uniform(-5, 5), 2)
         }
 
 
-def format_price(price, asset):
-    """Format price based on asset type"""
-    if asset == "btc":
-        return f"${price:,.0f}"
-    elif asset == "gold":
-        return f"${price:.2f}"
-    elif asset == "oil":
-        return f"${price:.2f}"
-    return f"{price:.2f}"
-
-
-def generate_trader_response(messages_context):
-    """Generate natural trader response using Claude API"""
-    
-    # Prepare conversation context
-    context_text = "\n".join([f"{m['sender']}: {m['text']}" for m in messages_context[-10:]])
-    
-    prices = get_live_prices()
-    gold_price = format_price(prices["gold"], "gold")
-    btc_price = format_price(prices["btc"], "btc")
-    oil_price = format_price(prices["oil"], "oil")
-    
-    uk_time = get_uk_time().strftime("%H:%M UTC")
-    
-    # Response type options
-    response_types = [
-        "market_observation",
-        "trading_wisdom",
-        "risk_management",
-        "technical_observation",
-        "engagement_question",
-        "news_related"
-    ]
-    
-    response_type = random.choice(response_types)
-    
-    prompts = {
-        "market_observation": f"""You're a 21-year-old trader chatting in a 14k member Telegram group. 
-        
-Recent chat: {context_text}
-
-Current prices: Gold {gold_price}, BTC {btc_price}, Oil {oil_price}
-
-Generate ONE casual but knowledgeable observation about the current market (focus on gold, BTC, or oil).
-Sound like a real trader - natural, not professional. Include the live price naturally.
-Keep it short (1-2 sentences max).
-""",
-        
-        "trading_wisdom": f"""You're a young trader sharing quick wisdom in a group chat.
-        
-Generate ONE short trading wisdom or psychology tip (about risk, patience, emotions, entry/exit, etc).
-Make it sound natural and casual, like advice from a friend who trades.
-Keep it 1-2 sentences.
-""",
-        
-        "risk_management": f"""You're giving casual risk management advice in a chat.
-        
-Generate ONE tip about position sizing, stop loss, or capital management.
-Sound like a 21-year-old who actually cares about not blowing accounts.
-Keep it relatable and casual. 1-2 sentences.
-""",
-        
-        "technical_observation": f"""You're making a technical observation about gold, BTC, or oil.
-
-Recent chat: {context_text}
-Current prices: Gold {gold_price}, BTC {btc_price}, Oil {oil_price}
-
-Make ONE observation about support/resistance, trend, momentum, or technical setup.
-Sound natural, not robotic. Include the price in a casual way.
-1-2 sentences.
-""",
-        
-        "engagement_question": f"""You're engaging the group with a question about trading.
-
-Recent chat: {context_text}
-
-Ask ONE question that's relevant to what people are discussing.
-Make it thought-provoking but casual. Something that makes people want to reply.
-Keep it natural and short (1-2 sentences).
-""",
-        
-        "news_related": f"""You're mentioning market news or economic events.
-
-Recent chat: {context_text}
-
-Make an observation about market news, economic data, or current events (like Fed decisions, inflation, geopolitics, etc).
-Sound casual and like you actually follow the news.
-1-2 sentences max.
-"""
-    }
-    
-    prompt = prompts.get(response_type, prompts["market_observation"])
-    
-    try:
-        response = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": os.environ.get("ANTHROPIC_API_KEY", ""),
-                "anthropic-version": "2023-06-01"
-            },
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 150,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ]
-            },
-            timeout=15
-        )
-        
-        data = response.json()
-        
-        if "content" in data and len(data["content"]) > 0:
-            message_text = data["content"][0]["text"].strip()
-            return message_text
-        
-    except Exception as e:
-        logger.error(f"Claude API error: {e}")
-    
-    # Fallback messages if API fails
-    fallback_messages = [
-        f"Gold sitting around {gold_price} rn, consolidating before the next move 🤔",
-        f"BTC looking interesting here at {btc_price}, anyone else watching this closely?",
-        f"Oil at {oil_price}, sellers or buyers in control? Hard to say without more confirmation",
-        "Sometimes the best trade is no trade. Patience > entering everything",
-        "If you're not managing risk, you're not trading - you're gambling 🎲",
-        f"Gold buyers defending {gold_price}, but is this real or just a bounce?",
-        "The chart will tell you what's next, but only if you listen",
-        f"BTC momentum looking different today at {btc_price}, anyone else see it?",
-    ]
-    
-    return random.choice(fallback_messages)
-
-
-async def get_last_messages(limit=10):
+async def get_last_messages(limit=5):
     """Get last N messages from group"""
     global client
     
@@ -321,8 +176,7 @@ async def get_last_messages(limit=10):
                 
                 messages.append({
                     "sender": sender,
-                    "text": message.text,
-                    "timestamp": message.date
+                    "text": message.text
                 })
         
         # Reverse to get chronological order
@@ -334,7 +188,101 @@ async def get_last_messages(limit=10):
         return []
 
 
-async def send_engagement_message(message_text):
+def generate_contextual_response(messages_context, prices):
+    """Generate contextual response using Claude"""
+    
+    if not messages_context:
+        return None
+    
+    # Format context
+    context_text = "\n".join([f"{m['sender']}: {m['text']}" for m in messages_context[-5:]])
+    
+    gold_price = prices["gold"]
+    btc_price = int(prices["btc"])
+    oil_price = prices["oil"]
+    
+    prompt = f"""You are a 21-year-old trader in a Telegram group chat with 14,000 people. 
+
+Recent chat:
+{context_text}
+
+Current prices: Gold ${gold_price}, BTC ${btc_price:,}, Oil ${oil_price}
+
+Generate ONE natural, conversational response (1-2 sentences MAX) that:
+- Flows naturally into this discussion (don't just post random stuff)
+- References what people just said (agree, challenge, or add to it)
+- Sometimes includes the live price naturally (don't just announce it)
+- Sounds like a real trader, casual and knowledgeable
+- NO emojis or excessive punctuation
+- NO "ALERT" or "UPDATE" language
+- Just a normal take from someone in the group
+
+Examples of GOOD responses:
+- "Yeah gold consolidating like that, buyers still defending that level"
+- "BTC at 42k, feels like something's about to break if volume comes in"
+- "Trump tweeting probably moving this more than technicals rn"
+- "Anyone else seeing the same resistance or is it just me?"
+
+Generate ONLY the response text, nothing else."""
+
+    try:
+        response = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01"
+            },
+            json={
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 100,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ]
+            },
+            timeout=15
+        )
+        
+        data = response.json()
+        
+        if "content" in data and len(data["content"]) > 0:
+            message_text = data["content"][0]["text"].strip()
+            # Limit to 2 sentences
+            sentences = message_text.split(".")
+            if len(sentences) > 2:
+                message_text = ".".join(sentences[:2]) + "."
+            return message_text
+        
+    except Exception as e:
+        logger.error(f"Claude API error: {e}")
+    
+    return None
+
+
+def generate_fallback_response(prices):
+    """Generate fallback response if reading chat fails"""
+    
+    gold_price = prices["gold"]
+    btc_price = int(prices["btc"])
+    oil_price = prices["oil"]
+    
+    fallback_messages = [
+        f"Gold stuck around ${gold_price}, consolidating or reversing?",
+        f"BTC at ${btc_price:,}, buyers stepping in or is this just a bounce?",
+        f"Oil at ${oil_price}, sellers still in control here",
+        "Patience over everything. Sometimes the best move is no move",
+        "Risk management > big wins. Protect the account always",
+        "What's everyone's take on this setup? Bullish or bearish?",
+        f"Gold ${gold_price} is key level, watch if it holds",
+        "Market's testing patience today but that's when real trades happen",
+        "Consolidation builds up for the next move. Stay ready",
+        "Anyone else seeing the same thing I'm seeing rn?",
+    ]
+    
+    return random.choice(fallback_messages)
+
+
+async def send_to_vantage(message_text):
     """Send message to Vantage group"""
     global client, last_posted_time
     
@@ -359,7 +307,7 @@ async def send_engagement_message(message_text):
         
         await client.send_message(entity, message_text, **kwargs)
         last_posted_time = time.time()
-        logger.info("Engagement message sent")
+        logger.info(f"✅ Sent: {message_text[:60]}...")
         return True
         
     except Exception as e:
@@ -369,50 +317,53 @@ async def send_engagement_message(message_text):
 
 async def engagement_loop():
     """Main engagement loop"""
-    global engagement_running, last_message_time, last_posted_time
+    global engagement_running, last_posted_time
     
-    logger.info("Engagement loop started")
+    logger.info("🚀 Engagement loop started - Smart conversational mode")
     last_posted_time = time.time()
     
     while engagement_running:
         try:
-            # Calculate delay based on market hours
+            # Get random delay (5-15 mins)
             delay = get_next_post_delay()
-            
-            uk_time = get_uk_time()
-            market_status = "active" if is_market_hours() else "quiet"
             next_post_minutes = delay / 60
             
-            logger.info(f"[{uk_time.strftime('%H:%M UTC')}] {market_status} hours. Next post in {next_post_minutes:.0f} mins")
+            uk_time = get_uk_time()
+            logger.info(f"[{uk_time.strftime('%H:%M UTC')}] Next post in {next_post_minutes:.1f} mins")
             
             await asyncio.sleep(delay)
             
             if not engagement_running:
                 break
             
-            # Check if there's been recent chat activity
-            messages = await get_last_messages(15)
+            # Get live prices
+            prices = get_live_prices()
+            logger.info(f"Prices: Gold ${prices['gold']}, BTC ${prices['btc']:,}, Oil ${prices['oil']}")
             
-            if not messages:
-                logger.info("No messages in chat, skipping")
-                continue
+            # Try to read chat and generate contextual response
+            messages = await get_last_messages(5)
             
-            # Check if messages are recent (within last 20 mins)
-            latest_message_time = messages[-1]["timestamp"]
-            minutes_since_last = (datetime.now(ZoneInfo("UTC")) - latest_message_time.replace(tzinfo=ZoneInfo("UTC"))).total_seconds() / 60
+            if messages and len(messages) > 0:
+                logger.info(f"Read {len(messages)} messages from chat")
+                response = await asyncio.get_event_loop().run_in_executor(
+                    None, 
+                    lambda: generate_contextual_response(messages, prices)
+                )
+                
+                if not response:
+                    logger.warning("Claude returned None, using fallback")
+                    response = generate_fallback_response(prices)
+            else:
+                logger.warning("No messages to read, using fallback")
+                response = generate_fallback_response(prices)
             
-            if minutes_since_last > 20:
-                logger.info(f"No recent activity ({minutes_since_last:.0f} mins ago), skipping")
-                continue
-            
-            # Generate and send response
-            logger.info(f"Generating response from {len(messages)} messages")
-            response = generate_trader_response(messages)
-            
-            sent = await send_engagement_message(response)
+            # Send the response
+            sent = await send_to_vantage(response)
             
             if sent:
-                logger.info(f"Sent: {response[:80]}...")
+                logger.info(f"✨ Posted successfully!")
+            else:
+                logger.warning("Failed to send message")
             
         except Exception as e:
             logger.error(f"Loop error: {e}")
@@ -429,6 +380,7 @@ def health():
     
     return jsonify({
         "status": "AI Trader Engagement Bot Running",
+        "mode": "SMART CONVERSATIONAL",
         "logged_in": SESSION_STRING != "",
         "engagement_running": engagement_running,
         "group_send_enabled": ENABLE_GROUP_SEND,
@@ -436,12 +388,11 @@ def health():
         "vantage_topic_id": VANTAGE_TOPIC_ID,
         "uk_time": uk_time.strftime("%Y-%m-%d %H:%M:%S %Z"),
         "market_hours": market_hours,
-        "post_frequency": "10-15 mins (active)" if market_hours else "45 mins (quiet)",
+        "post_frequency": "5-15 mins random (smart timing)",
         "last_posted": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(last_posted_time)) if last_posted_time > 0 else "Never",
-        "traders_focus": "Gold, BTC, Oil, Market News",
-        "personality": "21-year-old trader - casual, knowledgeable, natural",
-        "safe_test_mode": "/test_saved_messages",
-        "safe_preview": "/preview_response"
+        "how_it_works": "Reads last 5 messages from chat, uses Claude to generate contextual response that flows naturally into conversation",
+        "response_length": "1-2 sentences conversational",
+        "tone": "21-year-old trader - casual, knowledgeable, natural"
     })
 
 
@@ -462,7 +413,7 @@ def start_engagement():
     engagement_running = True
     asyncio.run_coroutine_threadsafe(engagement_loop(), loop)
     
-    return jsonify({"status": "Engagement started"})
+    return jsonify({"status": "Engagement started", "mode": "SMART CONVERSATIONAL"})
 
 
 @app.route("/stop_engagement", methods=["GET"])
@@ -472,66 +423,6 @@ def stop_engagement():
     
     engagement_running = False
     return jsonify({"status": "Engagement stopped"})
-
-
-@app.route("/preview_response", methods=["GET"])
-def preview_response():
-    """Preview a response without posting"""
-    future = asyncio.run_coroutine_threadsafe(get_last_messages(10), loop)
-    
-    try:
-        messages = future.result(timeout=20)
-        
-        if not messages:
-            return jsonify({"error": "No messages in chat"}), 400
-        
-        response = generate_trader_response(messages)
-        
-        return jsonify({
-            "ok": True,
-            "response": response,
-            "message_count": len(messages),
-            "last_message": f"{messages[-1]['sender']}: {messages[-1]['text'][:80]}..."
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/test_saved_messages", methods=["GET"])
-def test_saved_messages():
-    """Send test response to Saved Messages"""
-    future = asyncio.run_coroutine_threadsafe(get_last_messages(10), loop)
-    
-    try:
-        messages = future.result(timeout=20)
-        
-        if not messages:
-            return jsonify({"error": "No messages in chat"}), 400
-        
-        response = generate_trader_response(messages)
-        
-        # Send to Saved Messages
-        async def send_test():
-            try:
-                if not client or not await client.is_user_authorized():
-                    return False
-                await client.send_message("me", f"TEST RESPONSE:\n\n{response}")
-                return True
-            except:
-                return False
-        
-        future2 = asyncio.run_coroutine_threadsafe(send_test(), loop)
-        sent = future2.result(timeout=15)
-        
-        return jsonify({
-            "ok": sent,
-            "response": response,
-            "sent_to": "Saved Messages" if sent else "Failed"
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/send_code", methods=["GET"])
