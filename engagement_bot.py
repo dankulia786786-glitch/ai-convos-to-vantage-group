@@ -94,10 +94,10 @@ def get_next_post_delay():
 
 
 def get_live_prices():
-    """Fetch REAL LIVE prices from Gold-API - BTC & Gold only. NO FALLBACK!"""
+    """Fetch REAL LIVE prices - BTC & Gold. Try Gold-API first, then Yahoo fallback"""
     prices = {}
     
-    # Get REAL Gold from Gold-API (XAU = Gold)
+    # Get REAL Gold from Gold-API (primary)
     try:
         response = requests.get(
             "https://api.gold-api.com/price/XAU/USD",
@@ -106,15 +106,31 @@ def get_live_prices():
         data = response.json()
         if "price" in data:
             prices["gold"] = float(data["price"])
-            logger.info(f"✅ Real Gold (XAU): ${prices['gold']}")
-        else:
-            logger.warning("Gold API: No price in response")
-            prices["gold"] = None
+            logger.info(f"✅ Gold from Gold-API: ${prices['gold']}")
     except Exception as e:
-        logger.error(f"❌ Gold API failed: {e}")
+        logger.warning(f"Gold-API failed: {e}, trying Yahoo...")
         prices["gold"] = None
     
-    # Get REAL BTC from Gold-API
+    # Fallback: Get Gold from Yahoo Finance
+    if prices.get("gold") is None:
+        try:
+            response = requests.get(
+                "https://query1.finance.yahoo.com/v8/finance/chart/GC=F",
+                params={"interval": "1h", "range": "30d"},
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=10
+            )
+            data = response.json()
+            closes = data.get("chart", {}).get("result", [{}])[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
+            closes = [float(x) for x in closes if x is not None]
+            if closes:
+                prices["gold"] = closes[-1]
+                logger.info(f"✅ Gold from Yahoo: ${prices['gold']}")
+        except Exception as e:
+            logger.error(f"Yahoo Gold failed: {e}")
+            prices["gold"] = None
+    
+    # Get REAL BTC from Gold-API (primary)
     try:
         response = requests.get(
             "https://api.gold-api.com/price/BTC/USD",
@@ -123,13 +139,29 @@ def get_live_prices():
         data = response.json()
         if "price" in data:
             prices["btc"] = float(data["price"])
-            logger.info(f"✅ Real BTC: ${prices['btc']:,.0f}")
-        else:
-            logger.warning("BTC API: No price in response")
-            prices["btc"] = None
+            logger.info(f"✅ BTC from Gold-API: ${prices['btc']:,.0f}")
     except Exception as e:
-        logger.error(f"❌ BTC API failed: {e}")
+        logger.warning(f"Gold-API BTC failed: {e}, trying Yahoo...")
         prices["btc"] = None
+    
+    # Fallback: Get BTC from Yahoo Finance
+    if prices.get("btc") is None:
+        try:
+            response = requests.get(
+                "https://query1.finance.yahoo.com/v8/finance/chart/BTC-USD",
+                params={"interval": "1h", "range": "30d"},
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=10
+            )
+            data = response.json()
+            closes = data.get("chart", {}).get("result", [{}])[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
+            closes = [float(x) for x in closes if x is not None]
+            if closes:
+                prices["btc"] = closes[-1]
+                logger.info(f"✅ BTC from Yahoo: ${prices['btc']:,.0f}")
+        except Exception as e:
+            logger.error(f"Yahoo BTC failed: {e}")
+            prices["btc"] = None
     
     return prices
 
@@ -259,7 +291,7 @@ def generate_fallback_response(prices):
 
 
 async def send_to_vantage(message_text):
-    """Send message to Vantage group"""
+    """Send message to Vantage group using proven working pattern"""
     global client, last_posted_time
     
     try:
@@ -275,14 +307,24 @@ async def send_to_vantage(message_text):
             logger.error("VANTAGE_GROUP_ID missing")
             return False
         
-        # Get the entity (group or channel)
+        # Get entity (MUST convert to int)
         entity = await client.get_entity(int(VANTAGE_GROUP_ID))
-        logger.info(f"Entity type: {type(entity)}")
+        logger.info(f"Entity retrieved: {type(entity)}")
         
-        # Send message directly
-        result = await client.send_message(entity, message_text)
+        # Build kwargs with parse_mode
+        kwargs = {
+            "parse_mode": "md"
+        }
+        
+        # Add reply_to for topic if TOPIC_ID is set
+        if VANTAGE_TOPIC_ID and int(VANTAGE_TOPIC_ID) > 0:
+            kwargs["reply_to"] = int(VANTAGE_TOPIC_ID)
+            logger.info(f"Sending to topic: {VANTAGE_TOPIC_ID}")
+        
+        # Send message
+        sent = await client.send_message(entity, message_text, **kwargs)
         last_posted_time = time.time()
-        logger.info(f"✅ SENT: {message_text[:60]}... Result: {result}")
+        logger.info(f"✅ SENT: {message_text[:60]}... | Message ID: {sent.id if hasattr(sent, 'id') else 'unknown'}")
         return True
         
     except Exception as e:
