@@ -259,7 +259,7 @@ def generate_fallback_response(prices):
 
 
 async def send_to_vantage(message_text):
-    """Send message to Vantage group TOPIC"""
+    """Send message to Vantage group"""
     global client, last_posted_time
     
     try:
@@ -275,21 +275,21 @@ async def send_to_vantage(message_text):
             logger.error("VANTAGE_GROUP_ID missing")
             return False
         
-        entity = await client.get_entity(VANTAGE_GROUP_ID)
+        # Get the entity (group or channel)
+        entity = await client.get_entity(int(VANTAGE_GROUP_ID))
+        logger.info(f"Entity type: {type(entity)}")
         
-        # Send to topic using reply_to parameter
-        await client.send_message(
-            entity, 
-            message_text,
-            reply_to=int(VANTAGE_TOPIC_ID)  # Send to specific topic/thread
-        )
+        # Send message directly
+        result = await client.send_message(entity, message_text)
         last_posted_time = time.time()
-        logger.info(f"✅ SENT TO TOPIC {VANTAGE_TOPIC_ID}: {message_text[:60]}...")
+        logger.info(f"✅ SENT: {message_text[:60]}... Result: {result}")
         return True
         
     except Exception as e:
         logger.error(f"Send error: {e}")
         logger.error(f"Full error: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False
 
 
