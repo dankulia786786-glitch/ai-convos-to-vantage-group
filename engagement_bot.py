@@ -94,36 +94,42 @@ def get_next_post_delay():
 
 
 def get_live_prices():
-    """Fetch REAL LIVE prices - BTC & Gold only"""
+    """Fetch REAL LIVE prices - BTC & Gold only. NO FALLBACK!"""
     prices = {}
     
-    # Get REAL BTC from CoinGecko (WORKS PERFECTLY!)
+    # Get REAL Gold from Gold-API (XAU = Gold)
     try:
         response = requests.get(
-            "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
-            timeout=10
+            "https://api.gold-api.com/price?symbol=XAU&currency=USD",
+            timeout=5
         )
         data = response.json()
-        if "bitcoin" in data and "usd" in data["bitcoin"]:
-            prices["btc"] = float(data["bitcoin"]["usd"])
-            logger.info(f"✅ Real BTC: ${prices['btc']:,.0f}")
+        if "price" in data:
+            prices["gold"] = float(data["price"])
+            logger.info(f"✅ Real Gold (XAU): ${prices['gold']}")
+        else:
+            logger.warning("Gold API: No price in response")
+            prices["gold"] = None
     except Exception as e:
-        logger.error(f"BTC API error: {e}")
-        prices["btc"] = 42000.0
+        logger.error(f"❌ Gold API failed: {e}")
+        prices["gold"] = None
     
-    # Get REAL Gold - Use fallback price (3975 from your MT5)
+    # Get REAL BTC from Gold-API (BTC symbol available)
     try:
         response = requests.get(
-            "https://api.exchangerate-api.com/v4/latest/XAU",
-            timeout=10
+            "https://api.gold-api.com/price?symbol=BTC&currency=USD",
+            timeout=5
         )
         data = response.json()
-        if "rates" in data and "USD" in data["rates"]:
-            prices["gold"] = float(data["rates"]["USD"])
-            logger.info(f"✅ Real Gold: ${prices['gold']}")
-    except:
-        logger.info("Using fallback Gold price: 3975")
-        prices["gold"] = 3975.00
+        if "price" in data:
+            prices["btc"] = float(data["price"])
+            logger.info(f"✅ Real BTC: ${prices['btc']:,.0f}")
+        else:
+            logger.warning("BTC API: No price in response")
+            prices["btc"] = None
+    except Exception as e:
+        logger.error(f"❌ BTC API failed: {e}")
+        prices["btc"] = None
     
     return prices
 
@@ -302,8 +308,15 @@ async def engagement_loop():
             if not engagement_running:
                 break
             
+            # Get REAL LIVE prices only
             prices = get_live_prices()
-            logger.info(f"📊 REAL Prices: Gold ${prices['gold']}, BTC ${prices['btc']:,.0f}, Oil ${prices['oil']}")
+            
+            # Only post if we have REAL prices (no fallbacks!)
+            if prices["btc"] is None or prices["gold"] is None:
+                logger.warning("❌ Missing real prices - skipping this post cycle")
+                continue
+            
+            logger.info(f"📊 REAL Prices: BTC ${prices['btc']:,.0f}, Gold ${prices['gold']}")
             
             messages = await get_last_messages(5)
             
@@ -335,45 +348,45 @@ async def engagement_loop():
 
 @app.route("/test_prices", methods=["GET"])
 def test_prices():
-    """Test BTC & Gold prices"""
+    """Test BTC & Gold prices from Gold-API"""
     
     results = {
         "btc": {"status": "testing", "price": None},
         "gold": {"status": "testing", "price": None}
     }
     
-    # Test BTC from CoinGecko
+    # Test GOLD (XAU) from Gold-API
     try:
         response = requests.get(
-            "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
-            timeout=10
+            "https://api.gold-api.com/price?symbol=XAU&currency=USD",
+            timeout=5
         )
         data = response.json()
-        if "bitcoin" in data and "usd" in data["bitcoin"]:
-            results["btc"]["price"] = float(data["bitcoin"]["usd"])
+        if "price" in data:
+            results["gold"]["price"] = float(data["price"])
+            results["gold"]["status"] = "✅ SUCCESS"
+    except Exception as e:
+        results["gold"]["status"] = f"❌ Error"
+    
+    # Test BTC from Gold-API
+    try:
+        response = requests.get(
+            "https://api.gold-api.com/price?symbol=BTC&currency=USD",
+            timeout=5
+        )
+        data = response.json()
+        if "price" in data:
+            results["btc"]["price"] = float(data["price"])
             results["btc"]["status"] = "✅ SUCCESS"
     except Exception as e:
         results["btc"]["status"] = f"❌ Error"
     
-    # Test GOLD 
-    try:
-        response = requests.get(
-            "https://api.exchangerate-api.com/v4/latest/XAU",
-            timeout=10
-        )
-        data = response.json()
-        if "rates" in data and "USD" in data["rates"]:
-            results["gold"]["price"] = float(data["rates"]["USD"])
-            results["gold"]["status"] = "✅ SUCCESS"
-    except Exception as e:
-        results["gold"]["price"] = 3975.00
-        results["gold"]["status"] = "✅ FALLBACK (3975)"
-    
     return jsonify({
-        "test": "LIVE PRICES - BTC & Gold Only",
+        "test": "LIVE PRICES from Gold-API",
         "timestamp": get_uk_time().strftime("%Y-%m-%d %H:%M:%S %Z"),
         "results": results,
-        "all_working": all(r["status"].startswith("✅") for r in results.values())
+        "all_working": all(r["status"].startswith("✅") for r in results.values()),
+        "source": "Gold-API (Free, No Auth, No Limits!)"
     })
 
 
