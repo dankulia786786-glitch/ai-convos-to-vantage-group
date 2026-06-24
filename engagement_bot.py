@@ -406,8 +406,7 @@ def health():
         "uk_time": uk_time.strftime("%Y-%m-%d %H:%M:%S %Z"),
         "live_prices": {
             "gold": f"${prices['gold']}",
-            "btc": f"${prices['btc']:,.0f}",
-            "oil": f"${prices['oil']}"
+            "btc": f"${prices['btc']:,.0f}"
         },
         "test_endpoint": "/test_prices",
         "post_frequency": "5-15 mins random",
@@ -470,8 +469,7 @@ def test_post_now():
             "message_sent": response,
             "real_live_prices": {
                 "gold": f"${prices['gold']}",
-                "btc": f"${prices['btc']:,.0f}",
-                "oil": f"${prices['oil']}"
+                "btc": f"${prices['btc']:,.0f}"
             }
         }
     
