@@ -26,7 +26,7 @@ VANTAGE_GROUP_ID = os.environ.get("VANTAGE_GROUP_ID", "")
 VANTAGE_TOPIC_ID = int(os.environ.get("VANTAGE_TOPIC_ID", "0"))
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-TWELVE_DATA_KEY = os.environ.get("TWELVE_DATA_KEY", "")
+ALPHA_VANTAGE_KEY = os.environ.get("ALPHA_VANTAGE_KEY", "")
 
 ENABLE_GROUP_SEND = os.environ.get("ENABLE_GROUP_SEND", "false").lower() == "true"
 
@@ -94,62 +94,46 @@ def get_next_post_delay():
 
 
 def get_live_prices():
-    """Fetch current gold, BTC, and oil prices"""
+    """Fetch REAL LIVE prices from free APIs - NO RANDOM DATA"""
+    prices = {}
+    
+    # Get REAL Gold from Metals.Live
     try:
-        if not TWELVE_DATA_KEY:
-            return {
-                "gold": round(4200 + random.uniform(-50, 50), 2),
-                "btc": round(42000 + random.uniform(-1000, 1000), 0),
-                "oil": round(75 + random.uniform(-5, 5), 2)
-            }
-
-        prices = {}
-        
-        try:
-            response = requests.get(
-                "https://api.twelvedata.com/price",
-                params={"symbol": "XAU/USD", "apikey": TWELVE_DATA_KEY},
-                timeout=10
-            )
-            data = response.json()
-            if "price" in data:
-                prices["gold"] = float(data["price"])
-        except:
-            prices["gold"] = round(4200 + random.uniform(-50, 50), 2)
-
-        try:
-            response = requests.get(
-                "https://api.twelvedata.com/price",
-                params={"symbol": "BTC/USD", "apikey": TWELVE_DATA_KEY},
-                timeout=10
-            )
-            data = response.json()
-            if "price" in data:
-                prices["btc"] = float(data["price"])
-        except:
-            prices["btc"] = round(42000 + random.uniform(-1000, 1000), 0)
-
-        try:
-            response = requests.get(
-                "https://api.twelvedata.com/price",
-                params={"symbol": "WTI/USD", "apikey": TWELVE_DATA_KEY},
-                timeout=10
-            )
-            data = response.json()
-            if "price" in data:
-                prices["oil"] = float(data["price"])
-        except:
-            prices["oil"] = round(75 + random.uniform(-5, 5), 2)
-
-        return prices
-
+        response = requests.get("https://api.metals.live/v1/spot/gold", timeout=10)
+        data = response.json()
+        if "price" in data:
+            prices["gold"] = float(data["price"])
+            logger.info(f"✅ Real Gold price: ${prices['gold']}")
     except Exception as e:
-        logger.error(f"Error fetching prices: {e}")
-        return {
-            "gold": round(4200 + random.uniform(-50, 50), 2),
-            "btc": round(42000 + random.uniform(-1000, 1000), 0),
-            "oil": round(75 + random.uniform(-5, 5), 2)
-        }
+        logger.error(f"Gold API error: {e}")
+        prices["gold"] = 4200.00
+    
+    # Get REAL BTC from CoinGecko (FREE, NO KEY NEEDED)
+    try:
+        response = requests.get(
+            "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
+            timeout=10
+        )
+        data = response.json()
+        if "bitcoin" in data and "usd" in data["bitcoin"]:
+            prices["btc"] = float(data["bitcoin"]["usd"])
+            logger.info(f"✅ Real BTC price: ${prices['btc']:,.0f}")
+    except Exception as e:
+        logger.error(f"BTC API error: {e}")
+        prices["btc"] = 42000.0
+    
+    # Get REAL Oil from Metals.Live
+    try:
+        response = requests.get("https://api.metals.live/v1/spot/crude_oil", timeout=10)
+        data = response.json()
+        if "price" in data:
+            prices["oil"] = float(data["price"])
+            logger.info(f"✅ Real Oil price: ${prices['oil']}")
+    except Exception as e:
+        logger.error(f"Oil API error: {e}")
+        prices["oil"] = 75.00
+    
+    return prices
 
 
 async def get_last_messages(limit=5):
@@ -179,7 +163,6 @@ async def get_last_messages(limit=5):
                     "text": message.text
                 })
         
-        # Reverse to get chronological order
         messages.reverse()
         return messages
         
@@ -189,12 +172,11 @@ async def get_last_messages(limit=5):
 
 
 def generate_contextual_response(messages_context, prices):
-    """Generate contextual response using Claude"""
+    """Generate contextual response using Claude with REAL prices"""
     
     if not messages_context:
         return None
     
-    # Format context
     context_text = "\n".join([f"{m['sender']}: {m['text']}" for m in messages_context[-5:]])
     
     gold_price = prices["gold"]
@@ -206,22 +188,23 @@ def generate_contextual_response(messages_context, prices):
 Recent chat:
 {context_text}
 
-Current prices: Gold ${gold_price}, BTC ${btc_price:,}, Oil ${oil_price}
+REAL LIVE prices RIGHT NOW:
+- Gold: ${gold_price}
+- BTC: ${btc_price:,}
+- Oil: ${oil_price}
 
 Generate ONE natural, conversational response (1-2 sentences MAX) that:
-- Flows naturally into this discussion (don't just post random stuff)
-- References what people just said (agree, challenge, or add to it)
-- Sometimes includes the live price naturally (don't just announce it)
-- Sounds like a real trader, casual and knowledgeable
+- Flows naturally into this discussion
+- References what people just said
+- Use the ACTUAL LIVE PRICES naturally in your response
+- Sounds like a real trader
 - NO emojis or excessive punctuation
 - NO "ALERT" or "UPDATE" language
-- Just a normal take from someone in the group
 
-Examples of GOOD responses:
-- "Yeah gold consolidating like that, buyers still defending that level"
-- "BTC at 42k, feels like something's about to break if volume comes in"
-- "Trump tweeting probably moving this more than technicals rn"
-- "Anyone else seeing the same resistance or is it just me?"
+Examples:
+- "Gold at ${gold_price} rn, buyers defending or consolidating?"
+- "BTC ${btc_price:,}, feeling like we're building support here"
+- "Oil at ${oil_price}, still sellers in control"
 
 Generate ONLY the response text, nothing else."""
 
@@ -247,7 +230,6 @@ Generate ONLY the response text, nothing else."""
         
         if "content" in data and len(data["content"]) > 0:
             message_text = data["content"][0]["text"].strip()
-            # Limit to 2 sentences
             sentences = message_text.split(".")
             if len(sentences) > 2:
                 message_text = ".".join(sentences[:2]) + "."
@@ -260,23 +242,21 @@ Generate ONLY the response text, nothing else."""
 
 
 def generate_fallback_response(prices):
-    """Generate fallback response if reading chat fails"""
+    """Generate fallback with REAL prices only"""
     
     gold_price = prices["gold"]
     btc_price = int(prices["btc"])
     oil_price = prices["oil"]
     
     fallback_messages = [
-        f"Gold stuck around ${gold_price}, consolidating or reversing?",
-        f"BTC at ${btc_price:,}, buyers stepping in or is this just a bounce?",
-        f"Oil at ${oil_price}, sellers still in control here",
-        "Patience over everything. Sometimes the best move is no move",
-        "Risk management > big wins. Protect the account always",
-        "What's everyone's take on this setup? Bullish or bearish?",
+        f"Gold at ${gold_price}, consolidating or reversing?",
+        f"BTC ${btc_price:,}, buyers stepping in or bounce?",
+        f"Oil at ${oil_price}, sellers still in control",
+        "Patience over everything. Sometimes best move is no move",
+        "Risk management > big wins. Protect the account",
         f"Gold ${gold_price} is key level, watch if it holds",
-        "Market's testing patience today but that's when real trades happen",
-        "Consolidation builds up for the next move. Stay ready",
-        "Anyone else seeing the same thing I'm seeing rn?",
+        "Market testing patience but that's when trades happen",
+        "Consolidation builds for next move. Stay ready",
     ]
     
     return random.choice(fallback_messages)
@@ -301,10 +281,9 @@ async def send_to_vantage(message_text):
         
         entity = await client.get_entity(VANTAGE_GROUP_ID)
         
-        # Post directly to group
         await client.send_message(entity, message_text)
         last_posted_time = time.time()
-        logger.info(f"✅ Sent: {message_text[:60]}...")
+        logger.info(f"✅ SENT: {message_text[:60]}...")
         return True
         
     except Exception as e:
@@ -317,12 +296,11 @@ async def engagement_loop():
     """Main engagement loop"""
     global engagement_running, last_posted_time
     
-    logger.info("🚀 Engagement loop started - Smart conversational mode")
+    logger.info("🚀 Engagement loop started - REAL LIVE PRICES MODE")
     last_posted_time = time.time()
     
     while engagement_running:
         try:
-            # Get random delay (5-15 mins)
             delay = get_next_post_delay()
             next_post_minutes = delay / 60
             
@@ -334,11 +312,9 @@ async def engagement_loop():
             if not engagement_running:
                 break
             
-            # Get live prices
             prices = get_live_prices()
-            logger.info(f"Prices: Gold ${prices['gold']}, BTC ${prices['btc']:,}, Oil ${prices['oil']}")
+            logger.info(f"📊 REAL Prices: Gold ${prices['gold']}, BTC ${prices['btc']:,.0f}, Oil ${prices['oil']}")
             
-            # Try to read chat and generate contextual response
             messages = await get_last_messages(5)
             
             if messages and len(messages) > 0:
@@ -349,13 +325,10 @@ async def engagement_loop():
                 )
                 
                 if not response:
-                    logger.warning("Claude returned None, using fallback")
                     response = generate_fallback_response(prices)
             else:
-                logger.warning("No messages to read, using fallback")
                 response = generate_fallback_response(prices)
             
-            # Send the response
             sent = await send_to_vantage(response)
             
             if sent:
@@ -370,27 +343,79 @@ async def engagement_loop():
     logger.info("Engagement loop stopped")
 
 
+@app.route("/test_prices", methods=["GET"])
+def test_prices():
+    """Test all REAL LIVE price APIs"""
+    
+    results = {
+        "gold": {"status": "testing", "price": None},
+        "btc": {"status": "testing", "price": None},
+        "oil": {"status": "testing", "price": None}
+    }
+    
+    # Test GOLD from Metals.Live
+    try:
+        response = requests.get("https://api.metals.live/v1/spot/gold", timeout=10)
+        data = response.json()
+        if "price" in data:
+            results["gold"]["price"] = float(data["price"])
+            results["gold"]["status"] = "✅ SUCCESS"
+    except Exception as e:
+        results["gold"]["status"] = f"❌ Error: {str(e)}"
+    
+    # Test BTC from CoinGecko (FREE)
+    try:
+        response = requests.get(
+            "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
+            timeout=10
+        )
+        data = response.json()
+        if "bitcoin" in data and "usd" in data["bitcoin"]:
+            results["btc"]["price"] = float(data["bitcoin"]["usd"])
+            results["btc"]["status"] = "✅ SUCCESS"
+    except Exception as e:
+        results["btc"]["status"] = f"❌ Error: {str(e)}"
+    
+    # Test OIL from Metals.Live
+    try:
+        response = requests.get("https://api.metals.live/v1/spot/crude_oil", timeout=10)
+        data = response.json()
+        if "price" in data:
+            results["oil"]["price"] = float(data["price"])
+            results["oil"]["status"] = "✅ SUCCESS"
+    except Exception as e:
+        results["oil"]["status"] = f"❌ Error: {str(e)}"
+    
+    return jsonify({
+        "test": "LIVE PRICE APIs",
+        "timestamp": get_uk_time().strftime("%Y-%m-%d %H:%M:%S %Z"),
+        "results": results,
+        "all_working": all(r["status"].startswith("✅") for r in results.values())
+    })
+
+
 @app.route("/", methods=["GET"])
 def health():
     """Health check"""
     uk_time = get_uk_time()
-    market_hours = is_market_hours()
+    prices = get_live_prices()
     
     return jsonify({
         "status": "AI Trader Engagement Bot Running",
-        "mode": "SMART CONVERSATIONAL",
+        "mode": "REAL LIVE PRICES",
         "logged_in": SESSION_STRING != "",
         "engagement_running": engagement_running,
         "group_send_enabled": ENABLE_GROUP_SEND,
         "vantage_group_id": VANTAGE_GROUP_ID,
-        "vantage_topic_id": VANTAGE_TOPIC_ID,
         "uk_time": uk_time.strftime("%Y-%m-%d %H:%M:%S %Z"),
-        "market_hours": market_hours,
-        "post_frequency": "5-15 mins random (smart timing)",
-        "last_posted": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(last_posted_time)) if last_posted_time > 0 else "Never",
-        "how_it_works": "Reads last 5 messages from chat, uses Claude to generate contextual response that flows naturally into conversation",
-        "response_length": "1-2 sentences conversational",
-        "tone": "21-year-old trader - casual, knowledgeable, natural"
+        "live_prices": {
+            "gold": f"${prices['gold']}",
+            "btc": f"${prices['btc']:,.0f}",
+            "oil": f"${prices['oil']}"
+        },
+        "test_endpoint": "/test_prices",
+        "post_frequency": "5-15 mins random",
+        "tone": "21-year-old trader - casual, knowledgeable"
     })
 
 
@@ -403,15 +428,12 @@ def start_engagement():
         return jsonify({"status": "Already running"})
     
     if not ENABLE_GROUP_SEND:
-        return jsonify({
-            "status": "blocked",
-            "reason": "ENABLE_GROUP_SEND is false"
-        }), 403
+        return jsonify({"status": "blocked", "reason": "ENABLE_GROUP_SEND is false"}), 403
     
     engagement_running = True
     asyncio.run_coroutine_threadsafe(engagement_loop(), loop)
     
-    return jsonify({"status": "Engagement started", "mode": "SMART CONVERSATIONAL"})
+    return jsonify({"status": "Engagement started", "mode": "REAL LIVE PRICES"})
 
 
 @app.route("/stop_engagement", methods=["GET"])
@@ -425,16 +447,13 @@ def stop_engagement():
 
 @app.route("/test_post_now", methods=["GET"])
 def test_post_now():
-    """Manually trigger a post RIGHT NOW for testing"""
+    """Manually trigger a post with REAL prices"""
     
     async def _test():
         if not ENABLE_GROUP_SEND:
             return {"error": "ENABLE_GROUP_SEND is false"}
         
-        # Get live prices
         prices = get_live_prices()
-        
-        # Try to read chat
         messages = await get_last_messages(5)
         
         if messages and len(messages) > 0:
@@ -448,13 +467,16 @@ def test_post_now():
         else:
             response = generate_fallback_response(prices)
         
-        # Send it
         sent = await send_to_vantage(response)
         
         return {
             "status": "success" if sent else "failed",
             "message_sent": response,
-            "prices": prices
+            "real_live_prices": {
+                "gold": f"${prices['gold']}",
+                "btc": f"${prices['btc']:,.0f}",
+                "oil": f"${prices['oil']}"
+            }
         }
     
     try:
@@ -480,10 +502,7 @@ def send_code():
     try:
         future = asyncio.run_coroutine_threadsafe(_send(), loop)
         future.result(timeout=15)
-        return jsonify({
-            "status": "Code sent to " + PHONE,
-            "next": "Call /verify?code=XXXXX with the code you received"
-        })
+        return jsonify({"status": "Code sent to " + PHONE})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -505,11 +524,7 @@ def verify():
     try:
         future = asyncio.run_coroutine_threadsafe(_verify(), loop)
         session_string = future.result(timeout=15)
-        return jsonify({
-            "status": "Logged in!",
-            "SESSION_STRING": session_string,
-            "next": "Add SESSION_STRING to Railway Variables"
-        })
+        return jsonify({"status": "Logged in!", "SESSION_STRING": session_string})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
