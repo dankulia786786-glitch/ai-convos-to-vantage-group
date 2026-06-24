@@ -290,49 +290,63 @@ def generate_fallback_response(prices):
     return random.choice(fallback_messages)
 
 
-async def send_to_vantage(message_text):
-    """Send message to Vantage megagroup (supergroup)"""
+async def send_to_vantage(message_text, chart_image=None, reply_to=None):
+    """Send message to Vantage group - text or image"""
     global client, last_posted_time
     
+    if not ENABLE_GROUP_SEND:
+        logger.warning("Group sending is locked")
+        return None
+
+    if not VANTAGE_GROUP_ID:
+        logger.error("VANTAGE_GROUP_ID missing")
+        return None
+
+    # Default reply_to to TOPIC_ID if not provided
+    if reply_to is None and VANTAGE_TOPIC_ID and int(VANTAGE_TOPIC_ID) > 0:
+        reply_to = int(VANTAGE_TOPIC_ID)
+
     try:
-        if not ENABLE_GROUP_SEND:
-            logger.warning("Group send locked")
-            return False
-        
         if not client or not await client.is_user_authorized():
             logger.error("Not logged in")
-            return False
-        
-        if not VANTAGE_GROUP_ID:
-            logger.error("VANTAGE_GROUP_ID missing")
-            return False
-        
-        # For megagroups, send directly to the ID (don't use get_entity)
-        group_id = int(VANTAGE_GROUP_ID)
+            return None
+
+        # Get entity
+        entity = await client.get_entity(int(VANTAGE_GROUP_ID))
         
         kwargs = {
             "parse_mode": "md"
         }
-        
-        # Add reply_to for topic if set
-        if VANTAGE_TOPIC_ID and int(VANTAGE_TOPIC_ID) > 0:
-            kwargs["reply_to"] = int(VANTAGE_TOPIC_ID)
-            logger.info(f"Sending to megagroup {group_id}, topic {VANTAGE_TOPIC_ID}")
+
+        if reply_to:
+            kwargs["reply_to"] = int(reply_to)
+
+        # Send message or file
+        if chart_image:
+            sent = await client.send_file(
+                entity,
+                chart_image,
+                caption=message_text,
+                force_document=False,
+                **kwargs
+            )
         else:
-            logger.info(f"Sending to megagroup {group_id}")
-        
-        # Send directly to megagroup ID (Telethon handles it)
-        sent = await client.send_message(group_id, message_text, **kwargs)
+            sent = await client.send_message(
+                entity,
+                message_text,
+                **kwargs
+            )
+
         last_posted_time = time.time()
-        logger.info(f"✅ SENT to megagroup: {message_text[:60]}... | Message ID: {sent.id if hasattr(sent, 'id') else 'unknown'}")
-        return True
-        
+        logger.info(f"✅ Message sent to Vantage! ID: {sent.id if hasattr(sent, 'id') else 'unknown'}")
+        return sent
+
     except Exception as e:
         logger.error(f"Send error: {e}")
         logger.error(f"Full error: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
-        return False
+        return None
 
 
 async def engagement_loop():
@@ -379,7 +393,11 @@ async def engagement_loop():
             else:
                 response = generate_fallback_response(prices)
             
-            sent = await send_to_vantage(response)
+            sent = await send_to_vantage(
+                response,
+                chart_image=None,
+                reply_to=VANTAGE_TOPIC_ID if VANTAGE_TOPIC_ID and int(VANTAGE_TOPIC_ID) > 0 else None
+            )
             
             if sent:
                 logger.info(f"✨ Posted successfully!")
@@ -509,7 +527,12 @@ def test_post_now():
         else:
             response = generate_fallback_response(prices)
         
-        sent = await send_to_vantage(response)
+        # Send with reply_to=TOPIC_ID
+        sent = await send_to_vantage(
+            response,
+            chart_image=None,
+            reply_to=VANTAGE_TOPIC_ID if VANTAGE_TOPIC_ID and int(VANTAGE_TOPIC_ID) > 0 else None
+        )
         
         return {
             "status": "success" if sent else "failed",
