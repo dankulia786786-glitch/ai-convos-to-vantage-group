@@ -299,7 +299,8 @@ async def send_message_to_entity(entity_target, message_text, chart_image=None, 
             logger.error("Not logged in")
             return None
 
-        entity = await client.get_entity(entity_target)
+        # Use username instead of ID (works with fresh sessions!)
+        entity = await client.get_entity("vantageofficialcommunity")
 
         kwargs = {
             "parse_mode": "md"
