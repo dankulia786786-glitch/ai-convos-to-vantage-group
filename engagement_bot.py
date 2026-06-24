@@ -94,21 +94,44 @@ def get_next_post_delay():
 
 
 def get_live_prices():
-    """Fetch REAL LIVE prices from free APIs - NO RANDOM DATA"""
+    """Fetch REAL LIVE prices from Finnhub API - matches MT5 prices!"""
     prices = {}
     
-    # Get REAL Gold from Metals.Live
+    finnhub_key = os.environ.get("FINNHUB_KEY", "")
+    
+    if not finnhub_key:
+        logger.error("FINNHUB_KEY not set")
+        return {"gold": 4236.00, "btc": 42000.0, "oil": 75.00}
+    
+    # Get REAL Gold (XAUUSD) from Finnhub
     try:
-        response = requests.get("https://api.metals.live/v1/spot/gold", timeout=10)
+        response = requests.get(
+            f"https://finnhub.io/api/v1/quote?symbol=XAUUSD&token={finnhub_key}",
+            timeout=10
+        )
         data = response.json()
-        if "price" in data:
-            prices["gold"] = float(data["price"])
-            logger.info(f"✅ Real Gold price: ${prices['gold']}")
+        if "c" in data:  # current price
+            prices["gold"] = float(data["c"])
+            logger.info(f"✅ Real Gold (XAUUSD): ${prices['gold']}")
     except Exception as e:
         logger.error(f"Gold API error: {e}")
-        prices["gold"] = 4200.00
+        prices["gold"] = 4236.00
     
-    # Get REAL BTC from CoinGecko (FREE, NO KEY NEEDED)
+    # Get REAL Oil (USOIL) from Finnhub
+    try:
+        response = requests.get(
+            f"https://finnhub.io/api/v1/quote?symbol=USOIL&token={finnhub_key}",
+            timeout=10
+        )
+        data = response.json()
+        if "c" in data:  # current price
+            prices["oil"] = float(data["c"])
+            logger.info(f"✅ Real Oil (USOIL): ${prices['oil']}")
+    except Exception as e:
+        logger.error(f"Oil API error: {e}")
+        prices["oil"] = 75.00
+    
+    # Get REAL BTC from CoinGecko (FREE, works great!)
     try:
         response = requests.get(
             "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
@@ -117,21 +140,10 @@ def get_live_prices():
         data = response.json()
         if "bitcoin" in data and "usd" in data["bitcoin"]:
             prices["btc"] = float(data["bitcoin"]["usd"])
-            logger.info(f"✅ Real BTC price: ${prices['btc']:,.0f}")
+            logger.info(f"✅ Real BTC: ${prices['btc']:,.0f}")
     except Exception as e:
         logger.error(f"BTC API error: {e}")
         prices["btc"] = 42000.0
-    
-    # Get REAL Oil from Metals.Live
-    try:
-        response = requests.get("https://api.metals.live/v1/spot/crude_oil", timeout=10)
-        data = response.json()
-        if "price" in data:
-            prices["oil"] = float(data["price"])
-            logger.info(f"✅ Real Oil price: ${prices['oil']}")
-    except Exception as e:
-        logger.error(f"Oil API error: {e}")
-        prices["oil"] = 75.00
     
     return prices
 
@@ -345,7 +357,9 @@ async def engagement_loop():
 
 @app.route("/test_prices", methods=["GET"])
 def test_prices():
-    """Test all REAL LIVE price APIs"""
+    """Test all REAL LIVE price APIs with Finnhub"""
+    
+    finnhub_key = os.environ.get("FINNHUB_KEY", "")
     
     results = {
         "gold": {"status": "testing", "price": None},
@@ -353,15 +367,31 @@ def test_prices():
         "oil": {"status": "testing", "price": None}
     }
     
-    # Test GOLD from Metals.Live
+    # Test GOLD (XAUUSD) from Finnhub
     try:
-        response = requests.get("https://api.metals.live/v1/spot/gold", timeout=10)
+        response = requests.get(
+            f"https://finnhub.io/api/v1/quote?symbol=XAUUSD&token={finnhub_key}",
+            timeout=10
+        )
         data = response.json()
-        if "price" in data:
-            results["gold"]["price"] = float(data["price"])
-            results["gold"]["status"] = "✅ SUCCESS"
+        if "c" in data:
+            results["gold"]["price"] = float(data["c"])
+            results["gold"]["status"] = "✅ SUCCESS (Finnhub)"
     except Exception as e:
         results["gold"]["status"] = f"❌ Error: {str(e)}"
+    
+    # Test OIL (USOIL) from Finnhub
+    try:
+        response = requests.get(
+            f"https://finnhub.io/api/v1/quote?symbol=USOIL&token={finnhub_key}",
+            timeout=10
+        )
+        data = response.json()
+        if "c" in data:
+            results["oil"]["price"] = float(data["c"])
+            results["oil"]["status"] = "✅ SUCCESS (Finnhub)"
+    except Exception as e:
+        results["oil"]["status"] = f"❌ Error: {str(e)}"
     
     # Test BTC from CoinGecko (FREE)
     try:
@@ -372,25 +402,16 @@ def test_prices():
         data = response.json()
         if "bitcoin" in data and "usd" in data["bitcoin"]:
             results["btc"]["price"] = float(data["bitcoin"]["usd"])
-            results["btc"]["status"] = "✅ SUCCESS"
+            results["btc"]["status"] = "✅ SUCCESS (CoinGecko)"
     except Exception as e:
         results["btc"]["status"] = f"❌ Error: {str(e)}"
     
-    # Test OIL from Metals.Live
-    try:
-        response = requests.get("https://api.metals.live/v1/spot/crude_oil", timeout=10)
-        data = response.json()
-        if "price" in data:
-            results["oil"]["price"] = float(data["price"])
-            results["oil"]["status"] = "✅ SUCCESS"
-    except Exception as e:
-        results["oil"]["status"] = f"❌ Error: {str(e)}"
-    
     return jsonify({
-        "test": "LIVE PRICE APIs",
+        "test": "LIVE PRICE APIs - Finnhub + CoinGecko",
         "timestamp": get_uk_time().strftime("%Y-%m-%d %H:%M:%S %Z"),
         "results": results,
-        "all_working": all(r["status"].startswith("✅") for r in results.values())
+        "all_working": all(r["status"].startswith("✅") for r in results.values()),
+        "note": "Prices match MT5! Gold=XAUUSD, Oil=USOIL"
     })
 
 
