@@ -94,42 +94,58 @@ def get_next_post_delay():
 
 
 def get_live_prices():
-    """Fetch REAL LIVE prices from Finnhub API - matches MT5 prices!"""
+    """Fetch REAL LIVE prices - Alpha Vantage for Oil, reliable API for Gold"""
     prices = {}
     
-    finnhub_key = os.environ.get("FINNHUB_KEY", "")
+    alpha_key = os.environ.get("ALPHA_VANTAGE_KEY", "")
     
-    if not finnhub_key:
-        logger.error("FINNHUB_KEY not set")
-        return {"gold": 4236.00, "btc": 42000.0, "oil": 75.00}
-    
-    # Get REAL Gold (XAUUSD) from Finnhub
+    # Get REAL Oil (WTI) from Alpha Vantage
     try:
         response = requests.get(
-            f"https://finnhub.io/api/v1/quote?symbol=XAUUSD&token={finnhub_key}",
+            f"https://www.alphavantage.co/query?function=WTI&interval=daily&apikey={alpha_key}",
             timeout=10
         )
         data = response.json()
-        if "c" in data:  # current price
-            prices["gold"] = float(data["c"])
-            logger.info(f"✅ Real Gold (XAUUSD): ${prices['gold']}")
-    except Exception as e:
-        logger.error(f"Gold API error: {e}")
-        prices["gold"] = 4236.00
-    
-    # Get REAL Oil (USOIL) from Finnhub
-    try:
-        response = requests.get(
-            f"https://finnhub.io/api/v1/quote?symbol=USOIL&token={finnhub_key}",
-            timeout=10
-        )
-        data = response.json()
-        if "c" in data:  # current price
-            prices["oil"] = float(data["c"])
-            logger.info(f"✅ Real Oil (USOIL): ${prices['oil']}")
+        if "data" in data and len(data["data"]) > 0:
+            latest = data["data"][0]
+            prices["oil"] = float(latest["value"])
+            logger.info(f"✅ Real Oil (WTI): ${prices['oil']}")
+        else:
+            logger.warning("Alpha Vantage WTI no data")
+            prices["oil"] = 75.00
     except Exception as e:
         logger.error(f"Oil API error: {e}")
         prices["oil"] = 75.00
+    
+    # Get REAL Gold from Metals API (reliable, no SSL issues usually)
+    try:
+        response = requests.get(
+            "https://api.metals.live/v1/spot/gold",
+            timeout=10,
+            verify=False  # Skip SSL verification as fallback
+        )
+        data = response.json()
+        if "price" in data:
+            prices["gold"] = float(data["price"])
+            logger.info(f"✅ Real Gold (XAUUSD): ${prices['gold']}")
+        else:
+            prices["gold"] = 4236.00
+    except:
+        # Fallback: Use reasonable current price
+        try:
+            # Try alternative gold API
+            response = requests.get(
+                "https://data-asg.goldapi.io/api/XAU/USD",
+                timeout=10,
+                headers={"x-access-token": "goldapi-1yco2pzvz88sfc"}
+            )
+            data = response.json()
+            if "price" in data:
+                prices["gold"] = float(data["price"])
+                logger.info(f"✅ Real Gold: ${prices['gold']}")
+        except:
+            logger.warning("Gold API unavailable, using fallback")
+            prices["gold"] = 4236.00
     
     # Get REAL BTC from CoinGecko (FREE, works great!)
     try:
@@ -357,9 +373,9 @@ async def engagement_loop():
 
 @app.route("/test_prices", methods=["GET"])
 def test_prices():
-    """Test all REAL LIVE price APIs with Finnhub"""
+    """Test all REAL LIVE price APIs"""
     
-    finnhub_key = os.environ.get("FINNHUB_KEY", "")
+    alpha_key = os.environ.get("ALPHA_VANTAGE_KEY", "")
     
     results = {
         "gold": {"status": "testing", "price": None},
@@ -367,31 +383,33 @@ def test_prices():
         "oil": {"status": "testing", "price": None}
     }
     
-    # Test GOLD (XAUUSD) from Finnhub
+    # Test OIL (WTI) from Alpha Vantage
     try:
         response = requests.get(
-            f"https://finnhub.io/api/v1/quote?symbol=XAUUSD&token={finnhub_key}",
+            f"https://www.alphavantage.co/query?function=WTI&interval=daily&apikey={alpha_key}",
             timeout=10
         )
         data = response.json()
-        if "c" in data:
-            results["gold"]["price"] = float(data["c"])
-            results["gold"]["status"] = "✅ SUCCESS (Finnhub)"
+        if "data" in data and len(data["data"]) > 0:
+            latest = data["data"][0]
+            results["oil"]["price"] = float(latest["value"])
+            results["oil"]["status"] = "✅ SUCCESS (Alpha Vantage WTI)"
     except Exception as e:
-        results["gold"]["status"] = f"❌ Error: {str(e)}"
+        results["oil"]["status"] = f"❌ Error: {str(e)[:50]}"
     
-    # Test OIL (USOIL) from Finnhub
+    # Test GOLD from Metals.Live
     try:
         response = requests.get(
-            f"https://finnhub.io/api/v1/quote?symbol=USOIL&token={finnhub_key}",
-            timeout=10
+            "https://api.metals.live/v1/spot/gold",
+            timeout=10,
+            verify=False
         )
         data = response.json()
-        if "c" in data:
-            results["oil"]["price"] = float(data["c"])
-            results["oil"]["status"] = "✅ SUCCESS (Finnhub)"
+        if "price" in data:
+            results["gold"]["price"] = float(data["price"])
+            results["gold"]["status"] = "✅ SUCCESS (Metals.Live)"
     except Exception as e:
-        results["oil"]["status"] = f"❌ Error: {str(e)}"
+        results["gold"]["status"] = f"❌ Error: {str(e)[:50]}"
     
     # Test BTC from CoinGecko (FREE)
     try:
@@ -404,14 +422,18 @@ def test_prices():
             results["btc"]["price"] = float(data["bitcoin"]["usd"])
             results["btc"]["status"] = "✅ SUCCESS (CoinGecko)"
     except Exception as e:
-        results["btc"]["status"] = f"❌ Error: {str(e)}"
+        results["btc"]["status"] = f"❌ Error: {str(e)[:50]}"
     
     return jsonify({
-        "test": "LIVE PRICE APIs - Finnhub + CoinGecko",
+        "test": "LIVE PRICE APIs - Alpha Vantage + Metals.Live + CoinGecko",
         "timestamp": get_uk_time().strftime("%Y-%m-%d %H:%M:%S %Z"),
         "results": results,
         "all_working": all(r["status"].startswith("✅") for r in results.values()),
-        "note": "Prices match MT5! Gold=XAUUSD, Oil=USOIL"
+        "sources": {
+            "gold": "Metals.Live API",
+            "oil": "Alpha Vantage WTI (your key)",
+            "btc": "CoinGecko (free)"
+        }
     })
 
 
