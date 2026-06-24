@@ -291,7 +291,7 @@ def generate_fallback_response(prices):
 
 
 async def send_to_vantage(message_text):
-    """Send message to Vantage group using proven working pattern"""
+    """Send message to Vantage megagroup (supergroup)"""
     global client, last_posted_time
     
     try:
@@ -307,24 +307,24 @@ async def send_to_vantage(message_text):
             logger.error("VANTAGE_GROUP_ID missing")
             return False
         
-        # Get entity (MUST convert to int)
-        entity = await client.get_entity(int(VANTAGE_GROUP_ID))
-        logger.info(f"Entity retrieved: {type(entity)}")
+        # For megagroups, send directly to the ID (don't use get_entity)
+        group_id = int(VANTAGE_GROUP_ID)
         
-        # Build kwargs with parse_mode
         kwargs = {
             "parse_mode": "md"
         }
         
-        # Add reply_to for topic if TOPIC_ID is set
+        # Add reply_to for topic if set
         if VANTAGE_TOPIC_ID and int(VANTAGE_TOPIC_ID) > 0:
             kwargs["reply_to"] = int(VANTAGE_TOPIC_ID)
-            logger.info(f"Sending to topic: {VANTAGE_TOPIC_ID}")
+            logger.info(f"Sending to megagroup {group_id}, topic {VANTAGE_TOPIC_ID}")
+        else:
+            logger.info(f"Sending to megagroup {group_id}")
         
-        # Send message
-        sent = await client.send_message(entity, message_text, **kwargs)
+        # Send directly to megagroup ID (Telethon handles it)
+        sent = await client.send_message(group_id, message_text, **kwargs)
         last_posted_time = time.time()
-        logger.info(f"✅ SENT: {message_text[:60]}... | Message ID: {sent.id if hasattr(sent, 'id') else 'unknown'}")
+        logger.info(f"✅ SENT to megagroup: {message_text[:60]}... | Message ID: {sent.id if hasattr(sent, 'id') else 'unknown'}")
         return True
         
     except Exception as e:
