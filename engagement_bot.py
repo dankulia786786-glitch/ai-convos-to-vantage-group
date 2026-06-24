@@ -94,13 +94,13 @@ def get_next_post_delay():
 
 
 def get_live_prices():
-    """Fetch REAL LIVE prices - BTC & Gold only. NO FALLBACK!"""
+    """Fetch REAL LIVE prices from Gold-API - BTC & Gold only. NO FALLBACK!"""
     prices = {}
     
     # Get REAL Gold from Gold-API (XAU = Gold)
     try:
         response = requests.get(
-            "https://api.gold-api.com/price?symbol=XAU&currency=USD",
+            "https://api.gold-api.com/price/XAU/USD",
             timeout=5
         )
         data = response.json()
@@ -114,10 +114,10 @@ def get_live_prices():
         logger.error(f"❌ Gold API failed: {e}")
         prices["gold"] = None
     
-    # Get REAL BTC from Gold-API (BTC symbol available)
+    # Get REAL BTC from Gold-API
     try:
         response = requests.get(
-            "https://api.gold-api.com/price?symbol=BTC&currency=USD",
+            "https://api.gold-api.com/price/BTC/USD",
             timeout=5
         )
         data = response.json()
@@ -358,7 +358,7 @@ def test_prices():
     # Test GOLD (XAU) from Gold-API
     try:
         response = requests.get(
-            "https://api.gold-api.com/price?symbol=XAU&currency=USD",
+            "https://api.gold-api.com/price/XAU/USD",
             timeout=5
         )
         data = response.json()
@@ -371,7 +371,7 @@ def test_prices():
     # Test BTC from Gold-API
     try:
         response = requests.get(
-            "https://api.gold-api.com/price?symbol=BTC&currency=USD",
+            "https://api.gold-api.com/price/BTC/USD",
             timeout=5
         )
         data = response.json()
