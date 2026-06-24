@@ -301,17 +301,15 @@ async def send_to_vantage(message_text):
         
         entity = await client.get_entity(VANTAGE_GROUP_ID)
         
-        kwargs = {}
-        if VANTAGE_TOPIC_ID and VANTAGE_TOPIC_ID > 0:
-            kwargs["reply_to"] = VANTAGE_TOPIC_ID
-        
-        await client.send_message(entity, message_text, **kwargs)
+        # Post directly to group
+        await client.send_message(entity, message_text)
         last_posted_time = time.time()
         logger.info(f"✅ Sent: {message_text[:60]}...")
         return True
         
     except Exception as e:
         logger.error(f"Send error: {e}")
+        logger.error(f"Full error: {str(e)}")
         return False
 
 
