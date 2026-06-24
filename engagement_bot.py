@@ -310,17 +310,17 @@ def generate_fallback_response(prices):
     
     # COMMUNITY ENGAGEMENT QUESTIONS (group-focused, not individual)
     community_questions = [
-        f"Gold at ${gold_price:.2f}} - team, are you seeing consolidation or breakdown? 🤔",
-        f"BTC at ${btc_price:,}} - what's everyone's read on the 1hr? Bullish or waiting? 👀",
-        f"Gold consolidating at ${gold_price:.2f}}. Who's gonna take this trade if it breaks? Show of hands 🙋",
-        f"Team check: BTC at ${btc_price:,}}. Is this buy the dip or wait? 💭",
-        f"Gold at ${gold_price:.2f}} - everyone watching the same support level? 👀",
+        f"Gold at ${gold_price:.2f} - team, are you seeing consolidation or breakdown? 🤔",
+        f"BTC at ${btc_price:,} - what's everyone's read on the 1hr? Bullish or waiting? 👀",
+        f"Gold consolidating at ${gold_price:.2f}. Who's gonna take this trade if it breaks? Show of hands 🙋",
+        f"Team check: BTC at ${btc_price:,}. Is this buy the dip or wait? 💭",
+        f"Gold at ${gold_price:.2f} - everyone watching the same support level? 👀",
     ]
     
     # RISK/PSYCHOLOGY TIPS (group teaching, not individual)
     psychology_tips = [
-        f"Gold at ${gold_price:.2f}}. The traders who WIN don't chase. We're waiting together on this 🎯",
-        f"BTC at ${btc_price:,}}. Best trades feel boring, not exciting. If you're stressed, probably not the right one 😅",
+        f"Gold at ${gold_price:.2f}. The traders who WIN don't chase. We're waiting together on this 🎯",
+        f"BTC at ${btc_price:,}. Best trades feel boring, not exciting. If you're stressed, probably not the right one 😅",
         f"Gold consolidating - here's what separates us from losers: discipline. We have it. Most don't 💪",
         f"Never risk more than 1% per trade. That's how we survive bad days 📊",
         f"The hardest part isn't analysis. It's sitting on your hands when you don't have a setup. You're doing great 🙌",
@@ -328,45 +328,45 @@ def generate_fallback_response(prices):
     
     # PERSONALITY/HUMOR (memorable moments)
     humor_messages = [
-        f"Gold just did the classic fake-out at ${gold_price:.2f}}. Classic 😅",
-        f"BTC said 'jk' and bounced at ${btc_price:,}}. That's trading 🔄",
-        f"Gold at ${gold_price:.2f}} - when you're right but still stressed anyway. Yeah, that's it 🤷",
-        f"BTC giving us the range-bound special at ${btc_price:,}}. Consolidation szn 📦",
-        f"Gold at ${gold_price:.2f}}. The market said 'wait' and here we are waiting. I like it 🤝",
+        f"Gold just did the classic fake-out at ${gold_price:.2f}. Classic 😅",
+        f"BTC said 'jk' and bounced at ${btc_price:,}. That's trading 🔄",
+        f"Gold at ${gold_price:.2f} - when you're right but still stressed anyway. Yeah, that's it 🤷",
+        f"BTC giving us the range-bound special at ${btc_price:,}. Consolidation szn 📦",
+        f"Gold at ${gold_price:.2f}. The market said 'wait' and here we are waiting. I like it 🤝",
     ]
     
     # FOLLOW-UPS (reference previous calls, live progression)
     followups = [
-        f"Remember when I said watch this Gold level? We're testing it RIGHT NOW at ${gold_price:.2f}} 🎯",
-        f"That BTC setup I mentioned is playing out. We're at ${btc_price:,}} exactly where I said 📈",
-        f"Gold at ${gold_price:.2f}} - following the script. This is what happens with a plan 💯",
-        f"Called the consolidation on Gold. Here we are at ${gold_price:.2f}} doing exactly that. Trust the process 🔄",
+        f"Remember when I said watch this Gold level? We're testing it RIGHT NOW at ${gold_price:.2f} 🎯",
+        f"That BTC setup I mentioned is playing out. We're at ${btc_price:,} exactly where I said 📈",
+        f"Gold at ${gold_price:.2f} - following the script. This is what happens with a plan 💯",
+        f"Called the consolidation on Gold. Here we are at ${gold_price:.2f} doing exactly that. Trust the process 🔄",
     ]
     
     # MARKET NEWS AWARENESS (live info)
     news_messages = [
-        f"Gold at ${gold_price:.2f}}. Watch for Fed comments today - last time they spoke, metals spiked 📰",
-        f"BTC at ${btc_price:,}}. Trump just tweeted about the Fed. Market usually reacts. Stay alert 🚨",
-        f"Jobs data coming tomorrow. Watch how Gold at ${gold_price:.2f}} reacts. Teaching moment incoming 📊",
-        f"Economic data alert at ${gold_price:.2f}} Gold. These moments move the market 📈",
+        f"Gold at ${gold_price:.2f}. Watch for Fed comments today - last time they spoke, metals spiked 📰",
+        f"BTC at ${btc_price:,}. Trump just tweeted about the Fed. Market usually reacts. Stay alert 🚨",
+        f"Jobs data coming tomorrow. Watch how Gold at ${gold_price:.2f} reacts. Teaching moment incoming 📊",
+        f"Economic data alert at ${gold_price:.2f} Gold. These moments move the market 📈",
     ]
     
     # LIVE ANALYSIS (always current)
     live_analysis = [
-        f"Gold at ${gold_price:.2f}} right now. 1hr looks like it could hold here, 5min showing weakness 👀",
-        f"BTC at ${btc_price:,}}. Not convinced yet. 4hr consolidating, need the break 🎯",
-        f"Gold ${gold_price:.2f}} - the 1hr is fighting the 4hr. That's when we WAIT, don't guess 🤲",
-        f"BTC holding at ${btc_price:,}}. Volume is light right now. Not serious yet 📊",
-        f"Gold at ${gold_price:.2f}}. Consolidation is HEALTHY. Means the move could be bigger 💪",
+        f"Gold at ${gold_price:.2f} right now. 1hr looks like it could hold here, 5min showing weakness 👀",
+        f"BTC at ${btc_price:,}. Not convinced yet. 4hr consolidating, need the break 🎯",
+        f"Gold ${gold_price:.2f} - the 1hr is fighting the 4hr. That's when we WAIT, don't guess 🤲",
+        f"BTC holding at ${btc_price:,}. Volume is light right now. Not serious yet 📊",
+        f"Gold at ${gold_price:.2f}. Consolidation is HEALTHY. Means the move could be bigger 💪",
     ]
     
     # MOTIVATION/CONFIDENCE (keeps group engaged)
     motivation = [
         f"You got this team 💪 Most people quit BEFORE the move happens. Not us 🚀",
-        f"Gold at ${gold_price:.2f}}, BTC at ${btc_price:,}}. Patience = profits 📈",
+        f"Gold at ${gold_price:.2f}, BTC at ${btc_price:,}. Patience = profits 📈",
         f"Trading is 90% waiting, 10% execution. We're in the grind right now 🏆",
-        f"Gold at ${gold_price:.2f}}. Trust the plan. Big moves come from patience 🎯",
-        f"BTC at ${btc_price:,}}. Respect to everyone holding and waiting. That's discipline 🙌",
+        f"Gold at ${gold_price:.2f}. Trust the plan. Big moves come from patience 🎯",
+        f"BTC at ${btc_price:,}. Respect to everyone holding and waiting. That's discipline 🙌",
     ]
     
     # SPECIFIC INDICATOR TEACHING - Real trader language, varied, human
