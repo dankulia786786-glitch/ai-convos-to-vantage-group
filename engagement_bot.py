@@ -425,6 +425,48 @@ def stop_engagement():
     return jsonify({"status": "Engagement stopped"})
 
 
+@app.route("/test_post_now", methods=["GET"])
+def test_post_now():
+    """Manually trigger a post RIGHT NOW for testing"""
+    
+    async def _test():
+        if not ENABLE_GROUP_SEND:
+            return {"error": "ENABLE_GROUP_SEND is false"}
+        
+        # Get live prices
+        prices = get_live_prices()
+        
+        # Try to read chat
+        messages = await get_last_messages(5)
+        
+        if messages and len(messages) > 0:
+            response = await asyncio.get_event_loop().run_in_executor(
+                None, 
+                lambda: generate_contextual_response(messages, prices)
+            )
+            
+            if not response:
+                response = generate_fallback_response(prices)
+        else:
+            response = generate_fallback_response(prices)
+        
+        # Send it
+        sent = await send_to_vantage(response)
+        
+        return {
+            "status": "success" if sent else "failed",
+            "message_sent": response,
+            "prices": prices
+        }
+    
+    try:
+        future = asyncio.run_coroutine_threadsafe(_test(), loop)
+        result = future.result(timeout=30)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/send_code", methods=["GET"])
 def send_code():
     """Send login code to phone"""
