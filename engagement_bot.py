@@ -297,7 +297,7 @@ def get_market_open_message():
 
 
 def generate_fallback_response(prices):
-    """COMPLETE COMMUNITY BOT - Everything integrated, all LIVE"""
+    """NATURAL HUMAN TRADER - Direction + Analysis + News + Timeframes"""
     
     gold_price = prices["gold"]
     btc_price = int(prices["btc"])
@@ -308,136 +308,139 @@ def generate_fallback_response(prices):
     if market_alert:
         return market_alert
     
-    # COMMUNITY ENGAGEMENT QUESTIONS (group-focused, not individual)
-    community_questions = [
-        f"Gold at ${gold_price:.2f} - team, are you seeing consolidation or breakdown? 🤔",
-        f"BTC at ${btc_price:,} - what's everyone's read on the 1hr? Bullish or waiting? 👀",
-        f"Gold consolidating at ${gold_price:.2f}. Who's gonna take this trade if it breaks? Show of hands 🙋",
-        f"Team check: BTC at ${btc_price:,}. Is this buy the dip or wait? 💭",
-        f"Gold at ${gold_price:.2f} - everyone watching the same support level? 👀",
+    # TRADES & SETUPS (natural direction, specific levels, timeframes)
+    trade_setups = [
+        f"Gold looking solid on the daily, but 1hr is overbought. Might wait for a pullback around ${gold_price - 5:.2f} 👀",
+        f"4hr support holding nicely here at ${gold_price:.2f}. Could bounce, worth watching if buyers step in 📈",
+        f"Not convinced yet. Daily is bullish but if Gold loses ${gold_price - 10:.2f}, that's a problem. Watching that 🔴",
+        f"Gold just bounced off support. Buyers are definitely here. Short term target ${gold_price + 15:.2f} 🎯",
+        f"Weekly is up, 4hr is holding, but 1hr showing weakness. Conflicting signals. I'd wait 🤐",
+        f"Gold breaking above ${gold_price + 5:.2f} would change the whole game. That's key resistance 👀",
+        f"Support at ${gold_price - 8:.2f} is solid. If it holds, could see rally to ${gold_price + 20:.2f} 📊",
+        f"Daily trend is up but running out of steam. Could see pullback to ${gold_price - 12:.2f} before continuing 📉",
+        f"BTC at ${btc_price:,}. 4hr looks bullish but need to confirm above key level. Watching closely 🔍",
+        f"Gold consolidating between ${gold_price - 10:.2f} and ${gold_price + 10:.2f}. Breakout coming soon 💥",
+        f"Daily shows strength but getting tired. 1hr dip could be BUY opportunity here 💰",
+        f"Gold rejected at ${gold_price + 10:.2f}. If it fails again, could drop to ${gold_price - 15:.2f} 📉",
     ]
     
-    # RISK/PSYCHOLOGY TIPS (group teaching, not individual)
-    psychology_tips = [
-        f"Gold at ${gold_price:.2f}. The traders who WIN don't chase. We're waiting together on this 🎯",
-        f"BTC at ${btc_price:,}. Best trades feel boring, not exciting. If you're stressed, probably not the right one 😅",
-        f"Gold consolidating - here's what separates us from losers: discipline. We have it. Most don't 💪",
-        f"Never risk more than 1% per trade. That's how we survive bad days 📊",
-        f"The hardest part isn't analysis. It's sitting on your hands when you don't have a setup. You're doing great 🙌",
+    # TIMEFRAME ANALYSIS (naturally mentioned)
+    timeframe_analysis = [
+        f"Daily support is strong but 1hr is getting stretched. Could see pullback here, not a bad spot to buy dip 🎯",
+        f"Weekly is bullish Gold trend, 4hr holding up, 1hr showing some weakness. Bigger picture still good 📈",
+        f"The 4hr looks good but daily has resistance around ${gold_price + 15:.2f}. That's where sellers might step in 🔴",
+        f"1hr is oversold but 4hr daily are up. This dip at ${gold_price:.2f} could be a BUY 💪",
+        f"Gold on weekly is in clear uptrend. Don't fight the trend. Dips are buys 📈",
+        f"4hr and daily don't match right now. When they're conflicting, I wait for clarity 🤲",
+        f"1hr bounced hard but need 4hr confirmation. If it holds, we're good to push higher 👀",
+        f"Weekly showing fatigue. Even though 1hr is strong, be careful chasing here 🛑",
+        f"Daily gold still bullish. But 1hr on the verge of reversing. Good entry on dips only 🎯",
+        f"4hr in consolidation. When this breaks, it'll be on 1hr and daily confirmation. Watch for that 👁️",
     ]
     
-    # PERSONALITY/HUMOR (memorable moments)
-    humor_messages = [
-        f"Gold just did the classic fake-out at ${gold_price:.2f}. Classic 😅",
-        f"BTC said 'jk' and bounced at ${btc_price:,}. That's trading 🔄",
-        f"Gold at ${gold_price:.2f} - when you're right but still stressed anyway. Yeah, that's it 🤷",
-        f"BTC giving us the range-bound special at ${btc_price:,}. Consolidation szn 📦",
-        f"Gold at ${gold_price:.2f}. The market said 'wait' and here we are waiting. I like it 🤝",
-    ]
-    
-    # FOLLOW-UPS (reference previous calls, live progression)
-    followups = [
-        f"Remember when I said watch this Gold level? We're testing it RIGHT NOW at ${gold_price:.2f} 🎯",
-        f"That BTC setup I mentioned is playing out. We're at ${btc_price:,} exactly where I said 📈",
-        f"Gold at ${gold_price:.2f} - following the script. This is what happens with a plan 💯",
-        f"Called the consolidation on Gold. Here we are at ${gold_price:.2f} doing exactly that. Trust the process 🔄",
-    ]
-    
-    # MARKET NEWS AWARENESS (live info)
+    # NEWS & GEOPOLITICS (Trump, Fed, jobs, Iran, etc)
     news_messages = [
-        f"Gold at ${gold_price:.2f}. Watch for Fed comments today - last time they spoke, metals spiked 📰",
-        f"BTC at ${btc_price:,}. Trump just tweeted about the Fed. Market usually reacts. Stay alert 🚨",
-        f"Jobs data coming tomorrow. Watch how Gold at ${gold_price:.2f} reacts. Teaching moment incoming 📊",
-        f"Economic data alert at ${gold_price:.2f} Gold. These moments move the market 📈",
+        f"Trump tweeted about the Fed again. Historically Gold pops on that. Could see spike today 📈",
+        f"Jobs report tomorrow. Weak = Gold probably goes up, strong = pressure. Already pricing in something 📊",
+        f"Fed meeting coming. Gold usually moves hard on Fed talk. Watch for any dovish signals 🚨",
+        f"Iran tensions up again. Safe haven flows into Gold. Could see strength here 🔥",
+        f"Inflation data showed cooling. That usually hurts Gold short term. Watch support 📉",
+        f"Fed speaker today. These guys can move markets. Gold sensitive to hawkish/dovish talk 📻",
+        f"Economic slowdown fears. That's Gold bullish. Could see relief rally coming 📈",
+        f"Trump talking about trade wars again. Usually good for Gold as safe haven 🛡️",
+        f"Dollar weakness = Gold strength. Watching if DXY keeps falling 💹",
+        f"Geopolitical tensions ramping up. Gold should benefit. Classic safe haven play 🌍",
+        f"Central bank buying Gold. Usual signal for more upside coming 💰",
+        f"Recession chatter on Bloomberg. That's normally bullish for precious metals 📺",
     ]
     
-    # LIVE ANALYSIS (always current)
+    # PSYCHOLOGY/RISK (natural, group-focused)
+    psychology_tips = [
+        f"Don't chase here. Let Gold come to you at support. Patience wins 🎯",
+        f"Most people panic sell at the worst times. That's when real money steps in. Stay calm 💯",
+        f"Risk only 1% per trade. One bad loss can wipe you out. Protect yourself 📊",
+        f"The winning traders wait. They don't force trades. We're waiting together 🤝",
+        f"When it feels too easy, that's usually when it goes wrong. Stay humble 🙏",
+        f"Best trades feel boring. If you're excited, probably chasing. That's a bad sign 😅",
+        f"Take your wins. Don't let greed turn wins into losses. Lock it in 📌",
+        f"Losing is part of the game. What matters is how you respond. Stay disciplined 💪",
+        f"Everyone can spot the obvious trade. Real money waits for everyone else to panic 🔮",
+        f"Your biggest enemy is yourself. Emotions will destroy you. Keep it cold 🧊",
+        f"Stop losses exist for a reason. If you don't have one, you're gambling 🛑",
+        f"The market will humble you. Stay sharp and adapt 🧠",
+    ]
+    
+    # HUMOR/PERSONALITY (real, memorable)
+    humor_messages = [
+        f"Gold did the classic fake-out lol. Got a lot of people. Classic 😅",
+        f"When you're right but still sweating anyway 😤",
+        f"Gold said 'I'm going up' then immediately said 'jk' 🔄",
+        f"That move looked so real but nope, trap. These are the moments that teach you 📚",
+        f"Gold bounced so hard it scared the sellers lol 💨",
+        f"Market giveth, market taketh. That's trading 🎲",
+        f"If trading was easy everyone would be rich. Thank god it's not 😅",
+        f"That candle hurt but we're still here grinding 💪",
+        f"Gold playing mind games with us today 🎪",
+        f"Support held better than my anxiety did 😂",
+        f"This volatility is actually good for us 🎢",
+        f"Gold testing my patience and my account lol 😅",
+    ]
+    
+    # COMMUNITY ENGAGEMENT (natural questions)
+    community_questions = [
+        f"Gold at ${gold_price:.2f} - what's your read team? Bullish or waiting? 👀",
+        f"Anyone else seeing that support holding? Or am I missing something? 🤔",
+        f"That bounce looked real or fake? What's everyone thinking? 💭",
+        f"Team thoughts on ${gold_price:.2f} - is this a dip to buy or a trap? 🎯",
+        f"Who bought that dip? How's it looking for you guys? 📊",
+        f"Gold testing resistance again. Think it breaks this time? 🤷",
+        f"Honest question - are you shorting this bounce or going long? 💬",
+        f"What's your target if Gold breaks above ${gold_price + 15:.2f}? 🚀",
+        f"Anyone holding from the dip? Where's your stop loss? 🎯",
+        f"Gold bouncing hard. Is this the real move or another trap? 🤔",
+    ]
+    
+    # LIVE ANALYSIS (natural observations, direction)
     live_analysis = [
-        f"Gold at ${gold_price:.2f} right now. 1hr looks like it could hold here, 5min showing weakness 👀",
-        f"BTC at ${btc_price:,}. Not convinced yet. 4hr consolidating, need the break 🎯",
-        f"Gold ${gold_price:.2f} - the 1hr is fighting the 4hr. That's when we WAIT, don't guess 🤲",
-        f"BTC holding at ${btc_price:,}. Volume is light right now. Not serious yet 📊",
-        f"Gold at ${gold_price:.2f}. Consolidation is HEALTHY. Means the move could be bigger 💪",
+        f"Gold bouncing nicely from support. Buyers definitely stepping in 📈",
+        f"Not looking convinced yet. Need to hold this level to stay bullish 🤐",
+        f"Price action looks healthy. Could see continuation higher 💪",
+        f"Volume is light. Not a serious move yet. Waiting for real conviction 📊",
+        f"That rejection at resistance was sharp. Could pull back now 📉",
+        f"Gold holding support is good sign. But daily resistance is coming 👀",
+        f"Looks like consolidation. Big move coming when it breaks 💥",
+        f"Price is stuck. Neither buyers nor sellers in control yet 🤝",
+        f"That pump came on no volume. Classic trap move. Be careful 🚨",
+        f"Gold looks tired here. Could see pullback forming 📉",
+        f"Buyers stepping in nicely. Could form support here 🏠",
+        f"Really sharp rejection. Sellers have control right now 🔴",
     ]
     
-    # MOTIVATION/CONFIDENCE (keeps group engaged)
+    # MOTIVATION/CONFIDENCE (keeps energy up)
     motivation = [
-        f"You got this team 💪 Most people quit BEFORE the move happens. Not us 🚀",
-        f"Gold at ${gold_price:.2f}, BTC at ${btc_price:,}. Patience = profits 📈",
-        f"Trading is 90% waiting, 10% execution. We're in the grind right now 🏆",
-        f"Gold at ${gold_price:.2f}. Trust the plan. Big moves come from patience 🎯",
-        f"BTC at ${btc_price:,}. Respect to everyone holding and waiting. That's discipline 🙌",
+        f"Most people quit before the move happens. Not us 🚀",
+        f"Patience = profits. You're doing great if you're still here 💯",
+        f"This is the grind. 90% waiting, 10% execution. We're in it 🏆",
+        f"Trust the process. Big moves come from patience 🎯",
+        f"Respect to everyone holding and waiting. That's real discipline 🙌",
+        f"You got this team. The winners are the ones who don't panic 💪",
+        f"Keep your emotions out of it. Cold + calculated = winners 🧊",
+        f"Every loss teaches you something. Every win builds confidence. Keep going 📈",
+        f"The market rewards patience. Everyone else loses fast 🔮",
+        f"Stay focused. We're building something here 🏗️",
+        f"This dip is opportunity for smart money. Be that person 🧠",
+        f"Volatility is a feature, not a bug. We're making money off it 💰",
     ]
     
-    # SPECIFIC INDICATOR TEACHING - Real trader language, varied, human
-    indicator_teaching = [
-        # Moving Averages (varied ways to explain)
-        f"Gold at ${gold_price:.2f}. Notice price just bounced off the EMA50 on 1hr? That's what support looks like 📊",
-        f"BTC showing something interesting at ${btc_price:,} - the EMA200 just became resistance. When that flips, big deal 🔄",
-        f"See this on Gold? EMA is pointing UP on the 4hr at ${gold_price:.2f}. That's the trend telling you something 📈",
-        f"BTC at ${btc_price:,}. EMA50 crossed below EMA200 yesterday. That usually means sellers taking control 📉",
-        
-        # Volume Analysis (different examples)
-        f"Gold at ${gold_price:.2f} and volume just SPIKED. When volume comes in, that move is REAL 💪",
-        f"BTC volume dropping here at ${btc_price:,}. You know what that means? Consolidation before the breakout 🔐",
-        f"Look at Gold volume bar - it's tiny at ${gold_price:.2f}. Low volume moves = ignore them, wait for real confirmation 🤐",
-        f"BTC just pumped on HIGH volume at ${btc_price:,}. That's conviction. That's money moving 📊",
-        
-        # RSI (natural explanations)
-        f"Gold RSI just hit 70 at ${gold_price:.2f}. Getting stretched. That's when you STOP chasing 🎯",
-        f"BTC RSI is down at 35 on the 1hr at ${btc_price:,}. Oversold territory. Usually bounce from here 📈",
-        f"Honest take: Gold RSI at ${gold_price:.2f} is at 50. Neutral. Could go either way. That's when I do nothing 🤷",
-        f"See BTC RSI on 4hr? It's telling you buyers are getting tired. That matters 📉",
-        
-        # Divergences (real world examples)
-        f"Gold made a new high at ${gold_price:.2f} but the RSI didn't. Classic divergence. Reversal coming 🔄",
-        f"BTC showing divergence on the daily at ${btc_price:,}. Price up, RSI down. That's a RED FLAG 🚨",
-        f"This divergence on Gold 4hr? That's literally FREE MONEY if you can spot it 💰",
-        
-        # Consolidation (conversational)
-        f"Gold consolidating tight at ${gold_price:.2f}. Boring now but... this is where the big move starts 🚀",
-        f"BTC been ranging at ${btc_price:,} for hours. That's GOOD. Preparation before the move 📦",
-        f"You see that narrow range on Gold at ${gold_price:.2f}? Energy building. Someone's about to break this 💥",
-        
-        # Support/Resistance (real talk)
-        f"Gold just tested that support at ${gold_price:.2f} and bounced. Buyers are HERE 💪",
-        f"BTC resistance above at ${btc_price:,}. If it breaks THIS time, next level is way up 📈",
-        f"This level on Gold at ${gold_price:.2f} has held 3 times now. That's real support 🔐",
-        
-        # Breakouts (teaching how to trade them)
-        f"Gold at ${gold_price:.2f} about to break consolidation. When it does, WATCH the volume. That tells you if it's real 👀",
-        f"BTC breakout attempt at ${btc_price:,}. Most people buy the break. Smart people wait for confirmation first 🎯",
-        f"See how Gold broke resistance at ${gold_price:.2f} but came back down? Fake. Wait for it to HOLD 🔄",
-        
-        # Fake-outs (learning moments)
-        f"Gold pumped at ${gold_price:.2f} on low volume. Classic trap. This teaches you something 📚",
-        f"BTC broke out at ${btc_price:,} yesterday but couldn't hold. That's why volume matters so much 📊",
-        f"Ngl that fake-out on Gold at ${gold_price:.2f} got a lot of people. Me too sometimes, that's trading 😅",
-        
-        # Time Frames (practical teaching)
-        f"Gold on 5min looks bullish at ${gold_price:.2f} but 4hr is bearish. Never ignore the bigger picture 📊",
-        f"Trading tip: BTC at ${btc_price:,}. Always check the 4hr FIRST. Then trade the 1hr. That's the way 🎯",
-        f"See this on Gold? The 1hr and daily don't match at ${gold_price:.2f}. When they don't align, WAIT 🤐",
-        
-        # Trends (explaining them simply)
-        f"Gold in uptrend on 4hr at ${gold_price:.2f}. In uptrends, you BUY the dips. It's that simple 📈",
-        f"BTC in downtrend at ${btc_price:,}. Every pump is a SHORT opportunity. That's the rule 📉",
-        f"No trend on Gold right now at ${gold_price:.2f}. Sideways = don't force it. Wait for direction 🤝",
-        
-        # Practical tips (mixed teaching)
-        f"Gold at ${gold_price:.2f} - the best trades come when price AND volume agree. When they don't, skip it 💯",
-        f"BTC showing something at ${btc_price:,}. When 2 indicators agree, THAT'S your signal. Not just one 🎯",
-        f"Real lesson on Gold at ${gold_price:.2f}: support/resistance + volume + timeframe = WINNING combo 💪",
-    ]
     all_messages = (
-        community_questions + 
-        psychology_tips + 
-        humor_messages + 
-        followups + 
-        news_messages + 
-        live_analysis + 
-        motivation +
-        indicator_teaching
+        trade_setups +
+        timeframe_analysis +
+        news_messages +
+        psychology_tips +
+        humor_messages +
+        community_questions +
+        live_analysis +
+        motivation
     )
     
     return random.choice(all_messages)
