@@ -190,7 +190,8 @@ async def get_last_messages(limit=5):
                 
                 messages.append({
                     "sender": sender,
-                    "text": message.text
+                    "text": message.text,
+                    "message_id": message.id
                 })
         
         messages.reverse()
@@ -199,6 +200,159 @@ async def get_last_messages(limit=5):
     except Exception as e:
         logger.error(f"Error getting messages: {e}")
         return []
+
+
+async def get_last_messages_with_ids(limit=30):
+    """Get last N messages with message IDs for replies"""
+    global client
+    
+    try:
+        if not client or not await client.is_user_authorized():
+            logger.error("Not logged in")
+            return []
+        
+        entity = await client.get_entity(VANTAGE_GROUP_ID)
+        messages = []
+        
+        async for message in client.iter_messages(entity, limit=limit):
+            if message.text and not message.text.startswith("🚨"):  # Skip bot's own messages
+                sender = "Unknown"
+                sender_id = None
+                if message.sender:
+                    try:
+                        user = await client.get_entity(message.sender)
+                        sender = user.first_name or "Unknown"
+                        sender_id = user.id
+                    except:
+                        sender = "Unknown"
+                
+                messages.append({
+                    "sender": sender,
+                    "sender_id": sender_id,
+                    "text": message.text,
+                    "message_id": message.id
+                })
+        
+        messages.reverse()
+        return messages
+        
+    except Exception as e:
+        logger.error(f"Error getting messages with IDs: {e}")
+        return []
+
+
+def generate_reply_to_message(user_message, sender_name, prices):
+    """Generate contextual reply to user message using Claude"""
+    
+    gold_price = prices["gold"]
+    btc_price = int(prices["btc"])
+    
+    prompt = f"""You are Charlie, a 21-year-old trader in a Telegram group. Someone just said something and you're replying to help them.
+
+Their message: "{user_message}"
+Their name: {sender_name}
+
+REAL LIVE PRICES RIGHT NOW:
+- Gold: ${gold_price:.2f}
+- BTC: ${btc_price:,}
+
+Generate ONE helpful, human reply (1-2 sentences MAX) that:
+- Directly addresses what they said
+- Is humorous or casual, but factual
+- Gives them direction or help based on current prices
+- Sounds like a real trader responding
+- NO "ALERT" language
+- Use emojis naturally (maybe)
+
+Examples of good replies:
+- "Yeah that was a classic fake pump. Low volume always tells the story 📊"
+- "Gold looking tired here ngl. Could see pullback to $3980 before next move 👀"
+- "That's the right mindset. Patience > chasing 💯"
+- "Structure looks good but wait for confirmation. Don't FOMO in lol 😅"
+
+Generate ONLY the reply text, nothing else."""
+
+    try:
+        response = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01"
+            },
+            json={
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 100,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ]
+            },
+            timeout=15
+        )
+        
+        data = response.json()
+        
+        if "content" in data and len(data["content"]) > 0:
+            reply_text = data["content"][0]["text"].strip()
+            return reply_text
+        
+    except Exception as e:
+        logger.error(f"Claude reply generation error: {e}")
+    
+    return None
+
+
+async def maybe_reply_to_messages(prices):
+    """Randomly reply to 1 message every few posts (every 3rd-4th time)"""
+    global client
+    
+    try:
+        # Only reply 50% of the time (more active, still natural)
+        if random.random() > 0.5:
+            return None
+        
+        # Get recent messages
+        messages = await get_last_messages_with_ids(limit=25)
+        
+        if not messages or len(messages) < 1:
+            return None
+        
+        # Pick a random message from last 25 (not bot's own)
+        target_message = random.choice(messages)
+        
+        # Don't reply to very short messages or just emojis
+        if len(target_message["text"]) < 5:
+            return None
+        
+        logger.info(f"Replying to {target_message['sender']}: {target_message['text'][:50]}")
+        
+        # Generate reply using Claude
+        reply = generate_reply_to_message(
+            target_message["text"],
+            target_message["sender"],
+            prices
+        )
+        
+        if not reply:
+            logger.warning("Failed to generate reply")
+            return None
+        
+        # Send as reply to their message
+        entity = await client.get_entity(VANTAGE_GROUP_ID)
+        
+        sent = await client.send_message(
+            entity,
+            reply,
+            reply_to=target_message["message_id"],
+            parse_mode="md"
+        )
+        
+        logger.info(f"✨ Replied to {target_message['sender']} successfully!")
+        return sent
+        
+    except Exception as e:
+        logger.error(f"Reply error: {e}")
+        return None
 
 
 def generate_contextual_response(messages_context, prices):
@@ -511,10 +665,10 @@ async def send_to_vantage(message_text, chart_image=None, reply_to=None):
 
 
 async def engagement_loop():
-    """Main engagement loop"""
+    """Main engagement loop with posting + intelligent replies"""
     global engagement_running, last_posted_time
     
-    logger.info("🚀 Engagement loop started - REAL LIVE PRICES MODE")
+    logger.info("🚀 Engagement loop started - REAL LIVE PRICES MODE + SMART REPLIES")
     last_posted_time = time.time()
     
     while engagement_running:
@@ -538,8 +692,9 @@ async def engagement_loop():
                 logger.warning("❌ Missing real prices - skipping this post cycle")
                 continue
             
-            logger.info(f"📊 REAL Prices: BTC ${prices['btc']:,.0f}, Gold ${prices['gold']}")
+            logger.info(f"📊 REAL Prices: BTC ${prices['btc']:,.0f}, Gold ${prices['gold']:.2f}")
             
+            # MAIN POST
             messages = await get_last_messages(5)
             
             if messages and len(messages) > 0:
@@ -561,9 +716,14 @@ async def engagement_loop():
             )
             
             if sent:
-                logger.info(f"✨ Posted successfully!")
+                logger.info(f"✨ Posted main message successfully!")
             else:
-                logger.warning("Failed to send message")
+                logger.warning("Failed to send main message")
+            
+            # SMART REPLY (30% chance, every few posts)
+            reply_sent = await maybe_reply_to_messages(prices)
+            if reply_sent:
+                logger.info(f"💬 Smart reply sent!")
             
         except Exception as e:
             logger.error(f"Loop error: {e}")
