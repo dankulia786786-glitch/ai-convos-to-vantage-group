@@ -708,6 +708,72 @@ def test_post_now():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/send_code", methods=["GET"])
+def send_code():
+    """Send login code to phone"""
+    
+    async def _send():
+        global client
+        try:
+            if not client:
+                client = TelegramClient(StringSession(), API_ID, API_HASH)
+            
+            await client.connect()
+            
+            result = await client.send_code_request(PHONE)
+            
+            return {
+                "status": "success",
+                "message": f"Code sent to {PHONE}",
+                "phone_code_hash": result.phone_code_hash
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+    
+    try:
+        future = asyncio.run_coroutine_threadsafe(_send(), loop)
+        result = future.result(timeout=30)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/verify", methods=["GET"])
+def verify():
+    """Verify code and get SESSION_STRING"""
+    
+    code = request.args.get("code")
+    
+    if not code:
+        return jsonify({"error": "code parameter required"}), 400
+    
+    async def _verify():
+        global client
+        try:
+            if not client:
+                return {"status": "error", "message": "Client not initialized"}
+            
+            await client.sign_in(PHONE, code)
+            
+            session_string = client.session.save()
+            
+            return {
+                "status": "success",
+                "message": "Login successful!",
+                "session_string": session_string,
+                "instructions": "Copy the session_string above and update Railway variables with this value"
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+    
+    try:
+        future = asyncio.run_coroutine_threadsafe(_verify(), loop)
+        result = future.result(timeout=30)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
