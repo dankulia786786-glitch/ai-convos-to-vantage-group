@@ -503,7 +503,7 @@ async def send_whatsapp_promo():
 
 600+ traders receiving DAILY SIGNALS + live analysis"""
         
-        from telethon.types import InlineKeyboardMarkup, InlineKeyboardButton
+        from telethon.tl.types import InlineKeyboardMarkup, InlineKeyboardButton
         
         buttons = InlineKeyboardMarkup([
             [InlineKeyboardButton(text="✅ JOIN WHATSAPP GROUP ✅", url="https://chat.whatsapp.com/IkmwitDmS5D3vWo8fN6Mhj")]
