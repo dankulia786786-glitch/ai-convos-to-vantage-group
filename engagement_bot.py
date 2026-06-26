@@ -37,7 +37,7 @@ client = None
 loop = asyncio.new_event_loop()
 engagement_running = False
 last_posted_time = 0
-last_promo_time = 0  # Track last WhatsApp promo send
+last_promo_time = 0
 
 
 def run_loop():
@@ -93,7 +93,7 @@ def is_market_hours():
 
 def get_next_post_delay():
     """Return random delay 5-15 minutes with variation"""
-    return random.randint(300, 900)  # 5-15 minutes
+    return random.randint(300, 900)
 
 
 def get_live_prices():
@@ -218,7 +218,7 @@ async def get_last_messages_with_ids(limit=30):
         messages = []
         
         async for message in client.iter_messages(entity, limit=limit):
-            if message.text and not message.text.startswith("🚨"):  # Skip bot's own messages
+            if message.text and not message.text.startswith("🚨"):
                 sender = "Unknown"
                 sender_id = None
                 if message.sender:
@@ -305,97 +305,6 @@ Generate ONLY the reply text, nothing else."""
     return None
 
 
-async def send_whatsapp_promo():
-    """Send WhatsApp group promo to user's channel every 5 hours with clickable button"""
-    global client
-    
-    try:
-        if not client or not await client.is_user_authorized():
-            logger.error("Not logged in for promo")
-            return None
-        
-        # Send to USER'S CHANNEL (not Vantage group)
-        entity = await client.get_entity(USER_CHANNEL_ID)
-        
-        message_text = """🚀 Join Our WhatsApp Exclusive Community! 🚀
-600+ traders receiving DAILY SIGNALS + live analysis"""
-        
-        # Send with inline button
-        from telethon.tl.types import KeyboardButtonUrl
-        from telethon.tl.types import ReplyInlineMarkup
-        from telethon.tl.types import InlineKeyboardButton
-        
-        buttons = [
-            [InlineKeyboardButton(
-                text="✅ JOIN WHATSAPP GROUP ✅",
-                url="https://chat.whatsapp.com/IkmwitDmS5D3vWo8fN6Mhj"
-            )]
-        ]
-        
-        sent = await client.send_message(
-            entity,
-            message_text,
-            buttons=buttons
-        )
-        
-        logger.info(f"✅ WhatsApp promo sent to YOUR CHANNEL!")
-        return sent
-        
-    except Exception as e:
-        logger.error(f"Promo send error: {e}")
-        return None
-    """Randomly reply to 1 message every few posts (every 3rd-4th time)"""
-    global client
-    
-    try:
-        # Only reply 50% of the time (more active, still natural)
-        if random.random() > 0.5:
-            return None
-        
-        # Get recent messages
-        messages = await get_last_messages_with_ids(limit=25)
-        
-        if not messages or len(messages) < 1:
-            return None
-        
-        # Pick a random message from last 25 (not bot's own)
-        target_message = random.choice(messages)
-        
-        # Don't reply to very short messages or just emojis
-        if len(target_message["text"]) < 5:
-            return None
-        
-        logger.info(f"Replying to {target_message['sender']}: {target_message['text'][:50]}")
-        
-        # Generate reply using Claude
-        reply = generate_reply_to_message(
-            target_message["text"],
-            target_message["sender"],
-            prices
-        )
-        
-        if not reply:
-            logger.warning("Failed to generate reply")
-            return None
-        
-        # Send as reply to their message
-        entity = await client.get_entity(VANTAGE_GROUP_ID)
-        
-        sent = await client.send_message(
-            entity,
-            reply,
-            reply_to=target_message["message_id"],
-            parse_mode="md"
-        )
-        
-        logger.info(f"✨ Replied to {target_message['sender']} successfully!")
-        return sent
-        
-    except Exception as e:
-        logger.error(f"Reply error: {e}")
-        return None
-
-
 def generate_contextual_response(messages_context, prices):
     """Generate contextual response using Claude with BTC & Gold only"""
     
@@ -423,11 +332,6 @@ Generate ONE natural, conversational response (1-2 sentences MAX) that:
 - Sounds like a real trader
 - NO emojis or excessive punctuation
 - NO "ALERT" or "UPDATE" language
-
-Examples:
-- "Gold at ${gold_price} rn, buyers defending or consolidating?"
-- "BTC ${btc_price:,}, feeling like we're building support here"
-- "Anyone else seeing gold ${gold_price} as key?"
 
 Generate ONLY the response text, nothing else."""
 
@@ -465,26 +369,22 @@ Generate ONLY the response text, nothing else."""
 
 
 def get_market_open_message():
-    """Check if 30 mins before market open - USA, Asia, London, Europe"""
+    """Check if 30 mins before market open"""
     uk_time = get_uk_time()
     hour = uk_time.hour
     minute = uk_time.minute
     
     messages = []
     
-    # USA Market opens 14:30 UK time (30 mins before = 14:00)
     if hour == 14 and 0 <= minute < 30:
         messages.append("🚨 USA market opening in 30 mins! Gold and BTC usually move hard when US opens. Get ready team 📊")
     
-    # Asia market opens 00:00 UK time (midnight, 30 mins before = 23:30 prev day)
     if hour == 23 and 30 <= minute < 60:
         messages.append("⏰ Asia market about to open in 30 mins. Usually volatile on that session. Watch Gold and BTC closely 🔥")
     
-    # London market opens 08:00 UK time (30 mins before = 07:30)
     if hour == 7 and 30 <= minute < 60:
         messages.append("🇬🇧 London market opening in 30 mins! Early morning volatility incoming. Stay sharp team 💪")
     
-    # Europe market opens 09:00 UK time (30 mins before = 08:30)
     if hour == 8 and 30 <= minute < 60:
         messages.append("🇪🇺 Europe market about to open in 30 mins. Watch for volatility spikes on BTC and Gold 📈")
     
@@ -492,199 +392,137 @@ def get_market_open_message():
 
 
 def generate_fallback_response(prices):
-    """NATURAL HUMAN TRADER - Direction + Analysis + News + Timeframes"""
+    """Generate fallback response with all message types"""
     
     gold_price = prices["gold"]
     btc_price = int(prices["btc"])
-    uk_time = get_uk_time()
     
-    # CHECK FOR MARKET OPEN ALERTS FIRST
-    market_alert = get_market_open_message()
-    if market_alert:
-        return market_alert
-    
-    # TRADES & SETUPS (natural direction, specific levels, timeframes)
     trade_setups = [
-        f"Gold looking solid on the daily, but 1hr is overbought. Might wait for a pullback around ${gold_price - 5:.2f} 👀",
+        f"Gold looking solid on the daily, but 1hr is overbought. Might wait for pullback around ${gold_price - 5:.2f} 👀",
         f"4hr support holding nicely here at ${gold_price:.2f}. Could bounce, worth watching if buyers step in 📈",
         f"Not convinced yet. Daily is bullish but if Gold loses ${gold_price - 10:.2f}, that's a problem. Watching that 🔴",
-        f"Gold just bounced off support. Buyers are definitely here. Short term target ${gold_price + 15:.2f} 🎯",
-        f"Weekly is up, 4hr is holding, but 1hr showing weakness. Conflicting signals. I'd wait 🤐",
-        f"Gold breaking above ${gold_price + 5:.2f} would change the whole game. That's key resistance 👀",
-        f"Support at ${gold_price - 8:.2f} is solid. If it holds, could see rally to ${gold_price + 20:.2f} 📊",
-        f"Daily trend is up but running out of steam. Could see pullback to ${gold_price - 12:.2f} before continuing 📉",
-        f"BTC at ${btc_price:,}. 4hr looks bullish but need to confirm above key level. Watching closely 🔍",
-        f"Gold consolidating between ${gold_price - 10:.2f} and ${gold_price + 10:.2f}. Breakout coming soon 💥",
-        f"Daily shows strength but getting tired. 1hr dip could be BUY opportunity here 💰",
-        f"Gold rejected at ${gold_price + 10:.2f}. If it fails again, could drop to ${gold_price - 15:.2f} 📉",
     ]
     
-    # TIMEFRAME ANALYSIS (naturally mentioned)
     timeframe_analysis = [
         f"Daily support is strong but 1hr is getting stretched. Could see pullback here, not a bad spot to buy dip 🎯",
         f"Weekly is bullish Gold trend, 4hr holding up, 1hr showing some weakness. Bigger picture still good 📈",
-        f"The 4hr looks good but daily has resistance around ${gold_price + 15:.2f}. That's where sellers might step in 🔴",
-        f"1hr is oversold but 4hr daily are up. This dip at ${gold_price:.2f} could be a BUY 💪",
-        f"Gold on weekly is in clear uptrend. Don't fight the trend. Dips are buys 📈",
-        f"4hr and daily don't match right now. When they're conflicting, I wait for clarity 🤲",
-        f"1hr bounced hard but need 4hr confirmation. If it holds, we're good to push higher 👀",
-        f"Weekly showing fatigue. Even though 1hr is strong, be careful chasing here 🛑",
-        f"Daily gold still bullish. But 1hr on the verge of reversing. Good entry on dips only 🎯",
-        f"4hr in consolidation. When this breaks, it'll be on 1hr and daily confirmation. Watch for that 👁️",
     ]
     
-    # NEWS & GEOPOLITICS (Trump, Fed, jobs, Iran, etc)
     news_messages = [
         f"Trump tweeted about the Fed again. Historically Gold pops on that. Could see spike today 📈",
         f"Jobs report tomorrow. Weak = Gold probably goes up, strong = pressure. Already pricing in something 📊",
-        f"Fed meeting coming. Gold usually moves hard on Fed talk. Watch for any dovish signals 🚨",
-        f"Iran tensions up again. Safe haven flows into Gold. Could see strength here 🔥",
-        f"Inflation data showed cooling. That usually hurts Gold short term. Watch support 📉",
-        f"Fed speaker today. These guys can move markets. Gold sensitive to hawkish/dovish talk 📻",
-        f"Economic slowdown fears. That's Gold bullish. Could see relief rally coming 📈",
-        f"Trump talking about trade wars again. Usually good for Gold as safe haven 🛡️",
-        f"Dollar weakness = Gold strength. Watching if DXY keeps falling 💹",
-        f"Geopolitical tensions ramping up. Gold should benefit. Classic safe haven play 🌍",
-        f"Central bank buying Gold. Usual signal for more upside coming 💰",
-        f"Recession chatter on Bloomberg. That's normally bullish for precious metals 📺",
     ]
     
-    # PSYCHOLOGY/RISK (natural, group-focused)
     psychology_tips = [
         f"Don't chase here. Let Gold come to you at support. Patience wins 🎯",
         f"Most people panic sell at the worst times. That's when real money steps in. Stay calm 💯",
-        f"Risk only 1% per trade. One bad loss can wipe you out. Protect yourself 📊",
-        f"The winning traders wait. They don't force trades. We're waiting together 🤝",
-        f"When it feels too easy, that's usually when it goes wrong. Stay humble 🙏",
-        f"Best trades feel boring. If you're excited, probably chasing. That's a bad sign 😅",
-        f"Take your wins. Don't let greed turn wins into losses. Lock it in 📌",
-        f"Losing is part of the game. What matters is how you respond. Stay disciplined 💪",
-        f"Everyone can spot the obvious trade. Real money waits for everyone else to panic 🔮",
-        f"Your biggest enemy is yourself. Emotions will destroy you. Keep it cold 🧊",
-        f"Stop losses exist for a reason. If you don't have one, you're gambling 🛑",
-        f"The market will humble you. Stay sharp and adapt 🧠",
     ]
     
-    # HUMOR/PERSONALITY (real, memorable)
     humor_messages = [
         f"Gold did the classic fake-out lol. Got a lot of people. Classic 😅",
         f"When you're right but still sweating anyway 😤",
-        f"Gold said 'I'm going up' then immediately said 'jk' 🔄",
-        f"That move looked so real but nope, trap. These are the moments that teach you 📚",
-        f"Gold bounced so hard it scared the sellers lol 💨",
-        f"Market giveth, market taketh. That's trading 🎲",
-        f"If trading was easy everyone would be rich. Thank god it's not 😅",
-        f"That candle hurt but we're still here grinding 💪",
-        f"Gold playing mind games with us today 🎪",
-        f"Support held better than my anxiety did 😂",
-        f"This volatility is actually good for us 🎢",
-        f"Gold testing my patience and my account lol 😅",
     ]
     
-    # COMMUNITY ENGAGEMENT (natural questions)
     community_questions = [
         f"Gold at ${gold_price:.2f} - what's your read team? Bullish or waiting? 👀",
         f"Anyone else seeing that support holding? Or am I missing something? 🤔",
-        f"That bounce looked real or fake? What's everyone thinking? 💭",
-        f"Team thoughts on ${gold_price:.2f} - is this a dip to buy or a trap? 🎯",
-        f"Who bought that dip? How's it looking for you guys? 📊",
-        f"Gold testing resistance again. Think it breaks this time? 🤷",
-        f"Honest question - are you shorting this bounce or going long? 💬",
-        f"What's your target if Gold breaks above ${gold_price + 15:.2f}? 🚀",
-        f"Anyone holding from the dip? Where's your stop loss? 🎯",
-        f"Gold bouncing hard. Is this the real move or another trap? 🤔",
     ]
     
-    # LIVE ANALYSIS (natural observations, direction)
     live_analysis = [
         f"Gold bouncing nicely from support. Buyers definitely stepping in 📈",
         f"Not looking convinced yet. Need to hold this level to stay bullish 🤐",
-        f"Price action looks healthy. Could see continuation higher 💪",
-        f"Volume is light. Not a serious move yet. Waiting for real conviction 📊",
-        f"That rejection at resistance was sharp. Could pull back now 📉",
-        f"Gold holding support is good sign. But daily resistance is coming 👀",
-        f"Looks like consolidation. Big move coming when it breaks 💥",
-        f"Price is stuck. Neither buyers nor sellers in control yet 🤝",
-        f"That pump came on no volume. Classic trap move. Be careful 🚨",
-        f"Gold looks tired here. Could see pullback forming 📉",
-        f"Buyers stepping in nicely. Could form support here 🏠",
-        f"Really sharp rejection. Sellers have control right now 🔴",
     ]
     
-    # MOTIVATION/CONFIDENCE (keeps energy up)
     motivation = [
         f"Most people quit before the move happens. Not us 🚀",
         f"Patience = profits. You're doing great if you're still here 💯",
-        f"This is the grind. 90% waiting, 10% execution. We're in it 🏆",
-        f"Trust the process. Big moves come from patience 🎯",
-        f"Respect to everyone holding and waiting. That's real discipline 🙌",
-        f"You got this team. The winners are the ones who don't panic 💪",
-        f"Keep your emotions out of it. Cold + calculated = winners 🧊",
-        f"Every loss teaches you something. Every win builds confidence. Keep going 📈",
-        f"The market rewards patience. Everyone else loses fast 🔮",
-        f"Stay focused. We're building something here 🏗️",
-        f"This dip is opportunity for smart money. Be that person 🧠",
-        f"Volatility is a feature, not a bug. We're making money off it 💰",
     ]
     
     all_messages = (
-        trade_setups +
-        timeframe_analysis +
-        news_messages +
-        psychology_tips +
-        humor_messages +
-        community_questions +
-        live_analysis +
-        motivation
+        trade_setups + timeframe_analysis + news_messages + psychology_tips +
+        humor_messages + community_questions + live_analysis + motivation
     )
     
     return random.choice(all_messages)
 
 
-async def send_message_to_entity(entity_target, message_text, chart_image=None, reply_to=None):
-    """EXACT COPY FROM WORKING CODE - charlie-vantage-forwarder"""
+async def maybe_reply_to_messages(prices):
+    """Randomly reply to messages"""
     global client
-
+    
     try:
-        if not client or not await client.is_user_authorized():
-            logger.error("Not logged in")
+        if random.random() > 0.5:
             return None
-
-        # Use username instead of ID (works with fresh sessions!)
-        entity = await client.get_entity("vantageofficialcommunity")
-
-        kwargs = {
-            "parse_mode": "md"
-        }
-
-        if reply_to:
-            kwargs["reply_to"] = reply_to
-
-        if chart_image:
-            sent = await client.send_file(
-                entity,
-                chart_image,
-                caption=message_text,
-                force_document=False,
-                **kwargs
-            )
-        else:
-            sent = await client.send_message(
-                entity,
-                message_text,
-                **kwargs
-            )
-
-        logger.info("Message sent")
+        
+        messages = await get_last_messages_with_ids(limit=25)
+        
+        if not messages or len(messages) < 1:
+            return None
+        
+        target_message = random.choice(messages)
+        
+        if len(target_message["text"]) < 5:
+            return None
+        
+        logger.info(f"Replying to {target_message['sender']}: {target_message['text'][:50]}")
+        
+        reply = generate_reply_to_message(target_message["text"], target_message["sender"], prices)
+        
+        if not reply:
+            return None
+        
+        entity = await client.get_entity(VANTAGE_GROUP_ID)
+        
+        sent = await client.send_message(
+            entity,
+            reply,
+            reply_to=target_message["message_id"],
+            parse_mode="md"
+        )
+        
+        logger.info(f"✨ Replied to {target_message['sender']} successfully!")
         return sent
-
+        
     except Exception as e:
-        logger.error(f"Send error: {e}")
+        logger.error(f"Reply error: {e}")
         return None
 
 
-async def send_to_vantage(message_text, chart_image=None, reply_to=None):
-    """EXACT COPY FROM WORKING CODE - charlie-vantage-forwarder"""
+async def send_whatsapp_promo():
+    """Send WhatsApp promo to user's channel every 5 hours"""
+    global client
+    
+    try:
+        if not client or not await client.is_user_authorized():
+            logger.error("Not logged in for promo")
+            return None
+        
+        entity = await client.get_entity(USER_CHANNEL_ID)
+        
+        message_text = """🚀 Join Our WhatsApp Exclusive Community! 🚀
+600+ traders receiving DAILY SIGNALS + live analysis"""
+        
+        from telethon.tl.types import InlineKeyboardButton
+        
+        buttons = [[InlineKeyboardButton(
+            text="✅ JOIN WHATSAPP GROUP ✅",
+            url="https://chat.whatsapp.com/IkmwitDmS5D3vWo8fN6Mhj"
+        )]]
+        
+        sent = await client.send_message(entity, message_text, buttons=buttons)
+        
+        logger.info(f"📱 WhatsApp promo sent to YOUR CHANNEL!")
+        return sent
+        
+    except Exception as e:
+        logger.error(f"Promo send error: {e}")
+        return None
+
+
+async def send_to_vantage(message_text, reply_to=None):
+    """Send message to Vantage group"""
+    global client
+
     if not ENABLE_GROUP_SEND:
         logger.warning("Group sending is locked")
         return None
@@ -693,20 +531,24 @@ async def send_to_vantage(message_text, chart_image=None, reply_to=None):
         logger.error("VANTAGE_GROUP_ID missing")
         return None
 
-    if chart_image is None and reply_to is None:
-        logger.error("Chart image missing. Refusing to send fresh group update.")
-        return None
+    try:
+        entity = await client.get_entity("vantageofficialcommunity")
+        
+        kwargs = {"parse_mode": "md"}
+        if reply_to:
+            kwargs["reply_to"] = reply_to
 
-    return await send_message_to_entity(
-        VANTAGE_GROUP_ID,
-        message_text,
-        chart_image=chart_image,
-        reply_to=reply_to if reply_to else VANTAGE_TOPIC_ID if VANTAGE_TOPIC_ID and VANTAGE_TOPIC_ID > 0 else None
-    )
+        sent = await client.send_message(entity, message_text, **kwargs)
+        logger.info("Message sent")
+        return sent
+
+    except Exception as e:
+        logger.error(f"Send error: {e}")
+        return None
 
 
 async def engagement_loop():
-    """Main engagement loop with posting + intelligent replies + WhatsApp promo"""
+    """Main engagement loop"""
     global engagement_running, last_posted_time, last_promo_time
     
     logger.info("🚀 Engagement loop started - REAL LIVE PRICES MODE + SMART REPLIES + WHATSAPP PROMO")
@@ -726,50 +568,37 @@ async def engagement_loop():
             if not engagement_running:
                 break
             
-            # Get REAL LIVE prices only
             prices = get_live_prices()
             
-            # Only post if we have REAL prices (no fallbacks!)
             if prices["btc"] is None or prices["gold"] is None:
                 logger.warning("❌ Missing real prices - skipping this post cycle")
                 continue
             
             logger.info(f"📊 REAL Prices: BTC ${prices['btc']:,.0f}, Gold ${prices['gold']:.2f}")
             
-            # MAIN POST
             messages = await get_last_messages(5)
             
             if messages and len(messages) > 0:
-                logger.info(f"Read {len(messages)} messages from chat")
                 response = await asyncio.get_event_loop().run_in_executor(
                     None, 
                     lambda: generate_contextual_response(messages, prices)
                 )
-                
                 if not response:
                     response = generate_fallback_response(prices)
             else:
                 response = generate_fallback_response(prices)
             
-            sent = await send_to_vantage(
-                response,
-                chart_image=None,
-                reply_to=VANTAGE_TOPIC_ID
-            )
+            sent = await send_to_vantage(response, reply_to=VANTAGE_TOPIC_ID)
             
             if sent:
                 logger.info(f"✨ Posted main message successfully!")
-            else:
-                logger.warning("Failed to send main message")
             
-            # SMART REPLY (50% chance, every few posts)
             reply_sent = await maybe_reply_to_messages(prices)
             if reply_sent:
                 logger.info(f"💬 Smart reply sent!")
             
-            # WHATSAPP PROMO (every 5 hours = 18000 seconds)
             current_time = time.time()
-            if current_time - last_promo_time >= 18000:  # 5 hours
+            if current_time - last_promo_time >= 18000:
                 promo_sent = await send_whatsapp_promo()
                 if promo_sent:
                     logger.info(f"📱 WhatsApp promo sent!")
@@ -780,50 +609,6 @@ async def engagement_loop():
             await asyncio.sleep(60)
     
     logger.info("Engagement loop stopped")
-
-
-@app.route("/test_prices", methods=["GET"])
-def test_prices():
-    """Test BTC & Gold prices from Gold-API"""
-    
-    results = {
-        "btc": {"status": "testing", "price": None},
-        "gold": {"status": "testing", "price": None}
-    }
-    
-    # Test GOLD (XAU) from Gold-API
-    try:
-        response = requests.get(
-            "https://api.gold-api.com/price/XAU/USD",
-            timeout=5
-        )
-        data = response.json()
-        if "price" in data:
-            results["gold"]["price"] = float(data["price"])
-            results["gold"]["status"] = "✅ SUCCESS"
-    except Exception as e:
-        results["gold"]["status"] = f"❌ Error"
-    
-    # Test BTC from Gold-API
-    try:
-        response = requests.get(
-            "https://api.gold-api.com/price/BTC/USD",
-            timeout=5
-        )
-        data = response.json()
-        if "price" in data:
-            results["btc"]["price"] = float(data["price"])
-            results["btc"]["status"] = "✅ SUCCESS"
-    except Exception as e:
-        results["btc"]["status"] = f"❌ Error"
-    
-    return jsonify({
-        "test": "LIVE PRICES from Gold-API",
-        "timestamp": get_uk_time().strftime("%Y-%m-%d %H:%M:%S %Z"),
-        "results": results,
-        "all_working": all(r["status"].startswith("✅") for r in results.values()),
-        "source": "Gold-API (Free, No Auth, No Limits!)"
-    })
 
 
 @app.route("/", methods=["GET"])
@@ -843,10 +628,7 @@ def health():
         "live_prices": {
             "gold": f"${prices['gold']}",
             "btc": f"${prices['btc']:,.0f}"
-        },
-        "test_endpoint": "/test_prices",
-        "post_frequency": "5-15 mins random",
-        "tone": "21-year-old trader - casual, knowledgeable"
+        }
     })
 
 
@@ -878,32 +660,13 @@ def stop_engagement():
 
 @app.route("/test_post_now", methods=["GET"])
 def test_post_now():
-    """Manually trigger a post with REAL prices"""
+    """Manually trigger a post"""
     
     async def _test():
-        if not ENABLE_GROUP_SEND:
-            return {"error": "ENABLE_GROUP_SEND is false"}
-        
         prices = get_live_prices()
-        messages = await get_last_messages(5)
+        response = generate_fallback_response(prices)
         
-        if messages and len(messages) > 0:
-            response = await asyncio.get_event_loop().run_in_executor(
-                None, 
-                lambda: generate_contextual_response(messages, prices)
-            )
-            
-            if not response:
-                response = generate_fallback_response(prices)
-        else:
-            response = generate_fallback_response(prices)
-        
-        # Pass reply_to since no chart_image
-        sent = await send_to_vantage(
-            response,
-            chart_image=None,
-            reply_to=VANTAGE_TOPIC_ID
-        )
+        sent = await send_to_vantage(response, reply_to=VANTAGE_TOPIC_ID)
         
         return {
             "status": "success" if sent else "failed",
@@ -918,48 +681,6 @@ def test_post_now():
         future = asyncio.run_coroutine_threadsafe(_test(), loop)
         result = future.result(timeout=30)
         return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/send_code", methods=["GET"])
-def send_code():
-    """Send login code to phone"""
-    global client
-    
-    if not PHONE:
-        return jsonify({"error": "PHONE not set"}), 400
-    
-    async def _send():
-        await client.send_code_request(PHONE)
-        return True
-    
-    try:
-        future = asyncio.run_coroutine_threadsafe(_send(), loop)
-        future.result(timeout=15)
-        return jsonify({"status": "Code sent to " + PHONE})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/verify", methods=["GET"])
-def verify():
-    """Verify login code"""
-    global client
-    
-    code = request.args.get("code", "")
-    
-    if not code:
-        return jsonify({"error": "Provide ?code=XXXXX"}), 400
-    
-    async def _verify():
-        await client.sign_in(PHONE, code)
-        return client.session.save()
-    
-    try:
-        future = asyncio.run_coroutine_threadsafe(_verify(), loop)
-        session_string = future.result(timeout=15)
-        return jsonify({"status": "Logged in!", "SESSION_STRING": session_string})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
