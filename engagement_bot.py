@@ -489,7 +489,7 @@ async def maybe_reply_to_messages(prices):
 
 
 async def send_whatsapp_promo():
-    """Send WhatsApp promo to user's channel every 3 hours with button"""
+    """Send WhatsApp promo to user's channel every 3 hours"""
     global client
     
     try:
@@ -499,34 +499,17 @@ async def send_whatsapp_promo():
         
         entity = await client.get_entity(USER_CHANNEL_ID)
         
-        message_text = """🚀 Join Our WhatsApp Exclusive Community! 🚀
-
-600+ traders receiving DAILY SIGNALS + live analysis"""
+        message_text = (
+            "🚀 <b>Join Our WhatsApp Exclusive Community!</b> 🚀\n\n"
+            "600+ traders receiving DAILY SIGNALS + live analysis\n\n"
+            "<b>👇 JOIN HERE 👇</b>\n"
+            "https://chat.whatsapp.com/IkmwitDmS5D3vWo8fN6Mhj"
+        )
         
-        # Use JSON keyboard format (proven method)
-        whatsapp_button = {
-            "inline_keyboard": [[{
-                "text": "✅ JOIN WHATSAPP GROUP ✅",
-                "url": "https://chat.whatsapp.com/IkmwitDmS5D3vWo8fN6Mhj"
-            }]]
-        }
+        sent = await client.send_message(entity, message_text, parse_mode='html')
         
-        import json
-        payload = {
-            "chat_id": USER_CHANNEL_ID,
-            "text": message_text,
-            "parse_mode": "HTML",
-            "reply_markup": json.dumps(whatsapp_button)
-        }
-        
-        r = requests.post(f"https://api.telegram.org/bot{PHONE}/sendMessage", json=payload, timeout=10)
-        
-        if r.json().get("ok"):
-            logger.info(f"📱 WhatsApp promo sent with BUTTON!")
-            return True
-        else:
-            logger.error(f"Promo send failed: {r.json()}")
-            return None
+        logger.info(f"📱 WhatsApp promo sent to YOUR CHANNEL!")
+        return sent
         
     except Exception as e:
         logger.error(f"Promo send error: {e}")
