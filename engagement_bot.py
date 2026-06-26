@@ -489,7 +489,7 @@ async def maybe_reply_to_messages(prices):
 
 
 async def send_whatsapp_promo():
-    """Send WhatsApp promo to user's channel every 5 hours"""
+    """Send WhatsApp promo to user's channel every 3 hours with button"""
     global client
     
     try:
@@ -503,16 +503,30 @@ async def send_whatsapp_promo():
 
 600+ traders receiving DAILY SIGNALS + live analysis"""
         
-        from telethon.tl.types import InlineKeyboardMarkup, InlineKeyboardButton
+        # Use JSON keyboard format (proven method)
+        whatsapp_button = {
+            "inline_keyboard": [[{
+                "text": "✅ JOIN WHATSAPP GROUP ✅",
+                "url": "https://chat.whatsapp.com/IkmwitDmS5D3vWo8fN6Mhj"
+            }]]
+        }
         
-        buttons = InlineKeyboardMarkup([
-            [InlineKeyboardButton(text="✅ JOIN WHATSAPP GROUP ✅", url="https://chat.whatsapp.com/IkmwitDmS5D3vWo8fN6Mhj")]
-        ])
+        import json
+        payload = {
+            "chat_id": USER_CHANNEL_ID,
+            "text": message_text,
+            "parse_mode": "HTML",
+            "reply_markup": json.dumps(whatsapp_button)
+        }
         
-        sent = await client.send_message(entity, message_text, buttons=buttons)
+        r = requests.post(f"https://api.telegram.org/bot{PHONE}/sendMessage", json=payload, timeout=10)
         
-        logger.info(f"📱 WhatsApp promo sent to YOUR CHANNEL!")
-        return sent
+        if r.json().get("ok"):
+            logger.info(f"📱 WhatsApp promo sent with BUTTON!")
+            return True
+        else:
+            logger.error(f"Promo send failed: {r.json()}")
+            return None
         
     except Exception as e:
         logger.error(f"Promo send error: {e}")
