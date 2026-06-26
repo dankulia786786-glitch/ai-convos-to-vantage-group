@@ -598,7 +598,7 @@ async def engagement_loop():
                 logger.info(f"💬 Smart reply sent!")
             
             current_time = time.time()
-            if current_time - last_promo_time >= 18000:
+            if current_time - last_promo_time >= 10800:
                 promo_sent = await send_whatsapp_promo()
                 if promo_sent:
                     logger.info(f"📱 WhatsApp promo sent!")
