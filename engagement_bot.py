@@ -25,6 +25,8 @@ SESSION_STRING = os.environ.get("SESSION_STRING", "")
 VANTAGE_GROUP_ID = os.environ.get("VANTAGE_GROUP_ID", "")
 VANTAGE_TOPIC_ID = int(os.environ.get("VANTAGE_TOPIC_ID", "0"))
 
+USER_CHANNEL_ID = -1004447151625  # Your FREE GOLD & BTC SIGNALS channel
+
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ALPHA_VANTAGE_KEY = os.environ.get("ALPHA_VANTAGE_KEY", "")
 
@@ -304,7 +306,7 @@ Generate ONLY the reply text, nothing else."""
 
 
 async def send_whatsapp_promo():
-    """Send WhatsApp group promo message every 5 hours with clickable button"""
+    """Send WhatsApp group promo to user's channel every 5 hours with clickable button"""
     global client
     
     try:
@@ -312,7 +314,8 @@ async def send_whatsapp_promo():
             logger.error("Not logged in for promo")
             return None
         
-        entity = await client.get_entity(VANTAGE_GROUP_ID)
+        # Send to USER'S CHANNEL (not Vantage group)
+        entity = await client.get_entity(USER_CHANNEL_ID)
         
         message_text = """🚀 Join Our WhatsApp Exclusive Community! 🚀
 600+ traders receiving DAILY SIGNALS + live analysis"""
@@ -332,11 +335,10 @@ async def send_whatsapp_promo():
         sent = await client.send_message(
             entity,
             message_text,
-            buttons=buttons,
-            reply_to=VANTAGE_TOPIC_ID
+            buttons=buttons
         )
         
-        logger.info(f"✅ WhatsApp promo sent!")
+        logger.info(f"✅ WhatsApp promo sent to YOUR CHANNEL!")
         return sent
         
     except Exception as e:
