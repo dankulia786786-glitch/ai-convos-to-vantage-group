@@ -658,6 +658,29 @@ def stop_engagement():
     return jsonify({"status": "Engagement stopped"})
 
 
+@app.route("/test_promo_now", methods=["GET"])
+def test_promo_now():
+    """Manually trigger WhatsApp promo to your channel"""
+    
+    async def _test():
+        promo_sent = await send_whatsapp_promo()
+        
+        return {
+            "status": "success" if promo_sent else "failed",
+            "message": "🚀 Join Our WhatsApp Exclusive Community! 🚀\n600+ traders receiving DAILY SIGNALS + live analysis",
+            "button": "✅ JOIN WHATSAPP GROUP ✅",
+            "channel": "@gold_btc_signalss",
+            "whatsapp_link": "https://chat.whatsapp.com/IkmwitDmS5D3vWo8fN6Mhj"
+        }
+    
+    try:
+        future = asyncio.run_coroutine_threadsafe(_test(), loop)
+        result = future.result(timeout=30)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/test_post_now", methods=["GET"])
 def test_post_now():
     """Manually trigger a post"""
@@ -675,6 +698,28 @@ def test_post_now():
                 "gold": f"${prices['gold']:.2f}",
                 "btc": f"${prices['btc']:,.0f}"
             }
+        }
+    
+    try:
+        future = asyncio.run_coroutine_threadsafe(_test(), loop)
+        result = future.result(timeout=30)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/test_promo_now", methods=["GET"])
+def test_promo_now():
+    """Manually trigger WhatsApp promo to your channel"""
+    
+    async def _test():
+        promo_sent = await send_whatsapp_promo()
+        
+        return {
+            "status": "success" if promo_sent else "failed",
+            "message": "🚀 Join Our WhatsApp Exclusive Community! 🚀\n600+ traders receiving DAILY SIGNALS + live analysis",
+            "button": "✅ JOIN WHATSAPP GROUP ✅",
+            "channel": "@gold_btc_signalss"
         }
     
     try:
