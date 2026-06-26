@@ -35,6 +35,7 @@ client = None
 loop = asyncio.new_event_loop()
 engagement_running = False
 last_posted_time = 0
+last_promo_time = 0  # Track last WhatsApp promo send
 
 
 def run_loop():
@@ -302,7 +303,45 @@ Generate ONLY the reply text, nothing else."""
     return None
 
 
-async def maybe_reply_to_messages(prices):
+async def send_whatsapp_promo():
+    """Send WhatsApp group promo message every 5 hours with clickable button"""
+    global client
+    
+    try:
+        if not client or not await client.is_user_authorized():
+            logger.error("Not logged in for promo")
+            return None
+        
+        entity = await client.get_entity(VANTAGE_GROUP_ID)
+        
+        message_text = """🚀 Join Our WhatsApp Exclusive Community! 🚀
+600+ traders receiving DAILY SIGNALS + live analysis"""
+        
+        # Send with inline button
+        from telethon.tl.types import KeyboardButtonUrl
+        from telethon.tl.types import ReplyInlineMarkup
+        from telethon.tl.types import InlineKeyboardButton
+        
+        buttons = [
+            [InlineKeyboardButton(
+                text="✅ JOIN WHATSAPP GROUP ✅",
+                url="https://chat.whatsapp.com/IkmwitDmS5D3vWo8fN6Mhj"
+            )]
+        ]
+        
+        sent = await client.send_message(
+            entity,
+            message_text,
+            buttons=buttons,
+            reply_to=VANTAGE_TOPIC_ID
+        )
+        
+        logger.info(f"✅ WhatsApp promo sent!")
+        return sent
+        
+    except Exception as e:
+        logger.error(f"Promo send error: {e}")
+        return None
     """Randomly reply to 1 message every few posts (every 3rd-4th time)"""
     global client
     
@@ -665,11 +704,12 @@ async def send_to_vantage(message_text, chart_image=None, reply_to=None):
 
 
 async def engagement_loop():
-    """Main engagement loop with posting + intelligent replies"""
-    global engagement_running, last_posted_time
+    """Main engagement loop with posting + intelligent replies + WhatsApp promo"""
+    global engagement_running, last_posted_time, last_promo_time
     
-    logger.info("🚀 Engagement loop started - REAL LIVE PRICES MODE + SMART REPLIES")
+    logger.info("🚀 Engagement loop started - REAL LIVE PRICES MODE + SMART REPLIES + WHATSAPP PROMO")
     last_posted_time = time.time()
+    last_promo_time = time.time()
     
     while engagement_running:
         try:
@@ -720,10 +760,18 @@ async def engagement_loop():
             else:
                 logger.warning("Failed to send main message")
             
-            # SMART REPLY (30% chance, every few posts)
+            # SMART REPLY (50% chance, every few posts)
             reply_sent = await maybe_reply_to_messages(prices)
             if reply_sent:
                 logger.info(f"💬 Smart reply sent!")
+            
+            # WHATSAPP PROMO (every 5 hours = 18000 seconds)
+            current_time = time.time()
+            if current_time - last_promo_time >= 18000:  # 5 hours
+                promo_sent = await send_whatsapp_promo()
+                if promo_sent:
+                    logger.info(f"📱 WhatsApp promo sent!")
+                    last_promo_time = current_time
             
         except Exception as e:
             logger.error(f"Loop error: {e}")
