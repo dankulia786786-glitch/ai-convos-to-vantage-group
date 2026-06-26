@@ -708,28 +708,6 @@ def test_post_now():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/test_promo_now", methods=["GET"])
-def test_promo_now():
-    """Manually trigger WhatsApp promo to your channel"""
-    
-    async def _test():
-        promo_sent = await send_whatsapp_promo()
-        
-        return {
-            "status": "success" if promo_sent else "failed",
-            "message": "🚀 Join Our WhatsApp Exclusive Community! 🚀\n600+ traders receiving DAILY SIGNALS + live analysis",
-            "button": "✅ JOIN WHATSAPP GROUP ✅",
-            "channel": "@gold_btc_signalss"
-        }
-    
-    try:
-        future = asyncio.run_coroutine_threadsafe(_test(), loop)
-        result = future.result(timeout=30)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
