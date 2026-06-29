@@ -26,11 +26,15 @@ API_ID = int(os.environ.get("API_ID", "0"))
 API_HASH = os.environ.get("API_HASH", "")
 VANTAGE_SESSION_STRING = os.environ.get("VANTAGE_SESSION_STRING", "")
 VANTAGE_PHONE = os.environ.get("VANTAGE_PHONE", "")
+
+# For testing: send to Saved Messages (user ID = user's own ID)
+SEND_TO_SAVED = True  # Set to False to send to Vantage group
+
 VANTAGE_GROUP_ID = int(os.environ.get("VANTAGE_GROUP_ID", "0"))
 VANTAGE_TOPIC_ID = int(os.environ.get("VANTAGE_TOPIC_ID", "0"))
 
 CHART_IMG_KEY = os.environ.get("CHART_IMG_KEY", "")
-TWELVE_DATA_KEY = os.environ.get("TWELVE_DATA_KEY", "")
+OANDA_API_KEY = os.environ.get("OANDA_API_KEY", "")
 
 # ═══════════════════════════════════════════════════════════
 # GLOBAL STATE
@@ -43,11 +47,11 @@ loop = asyncio.new_event_loop()
 active_trades = {}
 trade_lock = threading.Lock()
 
-# Track message cooldowns (prevent spam)
+# Track message cooldowns (30 minutes)
 last_message_time = {}
-message_cooldown_seconds = 1800  # 30 minutes
+message_cooldown_seconds = 1800
 
-# Price levels already reported for each trade
+# Price levels already reported
 reported_levels = {}
 
 
@@ -84,33 +88,62 @@ async def init_client():
     return False
 
 
-# Initialize client on startup
 future = asyncio.run_coroutine_threadsafe(init_client(), loop)
-future.result(timeout=10)
+try:
+    future.result(timeout=10)
+except:
+    pass
 
 
 # ═══════════════════════════════════════════════════════════
-# PROFIT RANGES & EXPLANATIONS
+# MESSAGE TEMPLATES (VARIED & HUMAN-LIKE)
 # ═══════════════════════════════════════════════════════════
 
-PROFIT_LEVELS = {
-    20: {"£_range": (20, 35), "pips": 20},
-    40: {"£_range": (50, 70), "pips": 40},
-    60: {"£_range": (75, 80), "pips": 60},
-    80: {"£_range": (80, 110), "pips": 80},
-    100: {"£_range": (120, 160), "pips": 100, "label": "TP1 SMASHED ✅✅✅"},
-}
-
-EXPLANATIONS = {
-    "BUY_ENTRY": [
-        "Bullish momentum confirmed. Price above key support level.",
-        "Buyers stepping in at demand zone. Upside targets identified.",
-        "Break above resistance structure. Smart money long from here.",
+MESSAGE_TEMPLATES = {
+    20: [
+        "<b>✅✅✅ 20 PIPS IN PROFIT</b>\n\nYou can close now or Move SL to BE",
+        "<b>✅✅✅ 20+ PIPS LOCKED IN</b>\n\nTake it or shift SL to break even",
+        "<b>✅✅✅ 20 PIPS PROFIT SECURED</b>\n\nClose or let run risk-free",
+        "<b>✅✅✅ 20 PIPS DOWN</b>\n\nClose now or move stop loss to entry",
     ],
-    "SELL_ENTRY": [
-        "Bearish structure intact. Rejection from supply zone confirmed.",
-        "Sellers in control. Price below key resistance level.",
-        "Liquidity sweep complete. Smart money short from here.",
+    40: [
+        "<b>✅✅✅ 40 PIPS SMASHED</b>\n\nClose remaining or push to TP2",
+        "<b>✅✅✅ 40+ PIPS PROFIT</b>\n\nSecure now or let it run higher",
+        "<b>✅✅✅ 40 PIPS LOCKED</b>\n\nClose positions or move SL to entry",
+        "<b>✅✅✅ 40 PIPS IN PROFIT</b>\n\nTake gains or ride the momentum",
+    ],
+    60: [
+        "<b>✅✅✅ 60 PIPS IN PROFIT</b>\n\nClose or let it chase TP3",
+        "<b>✅✅✅ 60 PIPS SMASHED</b>\n\nSecure profits or stay in",
+        "<b>✅✅✅ 60+ PIPS DOWN</b>\n\nClose now or move SL to break even",
+        "<b>✅✅✅ 60 PIPS PROFIT</b>\n\nTake it or stay in the game",
+    ],
+    80: [
+        "<b>✅✅✅ 80 PIPS IN PROFIT</b>\n\nClose or let it run to TP3",
+        "<b>✅✅✅ 80 PIPS SMASHED</b>\n\nSecure gains or push higher",
+        "<b>✅✅✅ 80+ PIPS DOWN</b>\n\nClose remaining or ride momentum",
+        "<b>✅✅✅ 80 PIPS PROFIT LOCKED</b>\n\nTake it or stay the course",
+    ],
+    100: [
+        "<b>✅✅✅ TP1 SMASHED 100+ PIPS</b>\n\nMore to come!",
+        "<b>✅✅✅ 100 PIPS IN PROFIT</b>\n\nTP1 HIT! Better gains ahead!",
+        "<b>✅✅✅ TP1 SMASHED 100 PIPS</b>\n\nStay tuned for TP2!",
+        "<b>✅✅✅ 100+ PIPS DOWN</b>\n\nTP1 LOCKED! Momentum building!",
+    ],
+    "TP2": [
+        "<b>✅✅✅ TP2 SMASHED</b>\n\nClose or let final trade run to TP3!",
+        "<b>✅✅✅ TP2 HIT</b>\n\nMore profits secured! Targets closing!",
+        "<b>✅✅✅ TP2 LOCKED</b>\n\nStay in or take the win!",
+    ],
+    "TP3": [
+        "<b>✅✅✅ TP3 SMASHED</b>\n\nALL TARGETS HIT! 💰 Full profits locked!",
+        "<b>✅✅✅ ALL TARGETS HIT</b>\n\nFull win secured! 💰 Well done team!",
+        "<b>✅✅✅ TP3 LOCKED</b>\n\nComplete victory! 💰 All targets down!",
+    ],
+    "SL": [
+        "❌ <b>SL TRIGGERED</b>\n\nLooking for the next setup! Let's win on the next one! 💪",
+        "❌ <b>STOP LOSS HIT</b>\n\nWe move on! Next opportunity incoming! 🎯",
+        "❌ <b>SL CLOSED</b>\n\nBetter luck on the next trade! Stay ready! 🚀",
     ],
 }
 
@@ -212,11 +245,45 @@ def generate_profit_overlay(pair, pips, profit_gbp, chart_bytes=None):
 
 
 # ═══════════════════════════════════════════════════════════
+# OANDA PRICE FETCHING
+# ═══════════════════════════════════════════════════════════
+
+def get_oanda_price(pair):
+    """Get live price from OANDA API"""
+    if not OANDA_API_KEY:
+        return None
+    
+    try:
+        instrument = "XAU_USD" if pair == "XAUUSD" else "BTC_USD"
+        
+        url = f"https://api-fxpractice.oanda.com/v3/accounts/001-011-8842842-001/pricing"
+        params = {"instruments": instrument}
+        headers = {
+            "Authorization": f"Bearer {OANDA_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        r = requests.get(url, params=params, headers=headers, timeout=5)
+        
+        if r.status_code == 200:
+            data = r.json()
+            if "prices" in data and len(data["prices"]) > 0:
+                bid = float(data["prices"][0]["bids"][0]["price"])
+                ask = float(data["prices"][0]["asks"][0]["price"])
+                mid = (bid + ask) / 2
+                return mid
+    except Exception as e:
+        logger.error(f"OANDA price error: {e}")
+    
+    return None
+
+
+# ═══════════════════════════════════════════════════════════
 # TELEGRAM MESSAGE SENDING
 # ═══════════════════════════════════════════════════════════
 
-async def send_to_vantage(text, image_bytes=None):
-    """Send message to Vantage group"""
+async def send_to_telegram(text, image_bytes=None):
+    """Send message to Saved Messages or Vantage group"""
     global client
     
     try:
@@ -224,7 +291,12 @@ async def send_to_vantage(text, image_bytes=None):
             logger.error("Client not authorized")
             return False
         
-        entity = await client.get_entity(VANTAGE_GROUP_ID)
+        if SEND_TO_SAVED:
+            # Send to Saved Messages (own user ID)
+            entity = "me"
+        else:
+            # Send to Vantage group
+            entity = await client.get_entity(VANTAGE_GROUP_ID)
         
         if image_bytes:
             await client.send_file(
@@ -232,17 +304,17 @@ async def send_to_vantage(text, image_bytes=None):
                 image_bytes,
                 caption=text,
                 parse_mode='html',
-                reply_to=VANTAGE_TOPIC_ID
+                reply_to=VANTAGE_TOPIC_ID if not SEND_TO_SAVED else None
             )
         else:
             await client.send_message(
                 entity,
                 text,
                 parse_mode='html',
-                reply_to=VANTAGE_TOPIC_ID
+                reply_to=VANTAGE_TOPIC_ID if not SEND_TO_SAVED else None
             )
         
-        logger.info(f"✅ Message sent to Vantage group")
+        logger.info(f"✅ Message sent")
         return True
     
     except Exception as e:
@@ -293,8 +365,8 @@ def webhook():
                 }
                 reported_levels[trade_id] = set()
             
-            logger.info(f"Trade opened: {trade_id}")
-            return jsonify({"status": "ok"})
+            logger.info(f"✅ Trade opened: {trade_id} at {price}")
+            return jsonify({"status": "ok", "trade_id": trade_id})
         
         return jsonify({"status": "ok"})
     
@@ -315,42 +387,19 @@ def mt5_close():
         
         logger.info(f"MT5 close: {pair} {close_type} price={price} profit={profit}")
         
-        if close_type == "TP1":
-            text = (
-                "<b>TP1 SMASHED ✅✅✅</b>\n\n"
-                "☑️ Close your positions now and secure your profits\n\n"
-                "Or\n\n"
-                "☑️ Move your SL to Break Even and let the trade run risk free"
-            )
-            
-            # Send message
-            future = asyncio.run_coroutine_threadsafe(send_to_vantage(text), loop)
-            future.result(timeout=15)
-        
-        elif close_type == "TP2":
-            text = (
-                "<b>TP2 SMASHED ✅✅✅✅</b>\n\n"
-                "☑️ Close remaining positions and secure your profits\n\n"
-                "Or\n\n"
-                "☑️ Let the remaining trade run risk free to TP3"
-            )
-            future = asyncio.run_coroutine_threadsafe(send_to_vantage(text), loop)
-            future.result(timeout=15)
-        
-        elif close_type == "TP3":
-            text = (
-                "<b>TP3 SMASHED ✅✅✅✅✅</b>\n\n"
-                "☑️ ALL TARGETS HIT!\n\n"
-                "💰 Full profits secured.\n\n"
-                "👏 Well done team!"
-            )
-            future = asyncio.run_coroutine_threadsafe(send_to_vantage(text), loop)
-            future.result(timeout=15)
-        
+        if close_type in ("TP1", "TP2", "TP3"):
+            text = random.choice(MESSAGE_TEMPLATES.get(close_type, MESSAGE_TEMPLATES[100]))
         elif close_type == "SL":
-            text = "❌ SL Triggered Team ❌\nLooking for the next Set-Up. Lets win on the Next one!"
-            future = asyncio.run_coroutine_threadsafe(send_to_vantage(text), loop)
+            text = random.choice(MESSAGE_TEMPLATES["SL"])
+        else:
+            return jsonify({"status": "ignored"})
+        
+        # Send message
+        future = asyncio.run_coroutine_threadsafe(send_to_telegram(text), loop)
+        try:
             future.result(timeout=15)
+        except:
+            pass
         
         return jsonify({"status": "ok"})
     
@@ -365,7 +414,7 @@ def mt5_close():
 
 def monitor_profits():
     """Monitor open trades and send profit level messages"""
-    logger.info("Profit monitor started")
+    logger.info("✅ Profit monitor started - monitoring via OANDA")
     
     while True:
         try:
@@ -380,13 +429,11 @@ def monitor_profits():
                 direction = trade["direction"]
                 entry_price = trade["entry_price"]
                 
-                # Get current price
-                if pair == "XAUUSD":
-                    current_price = get_gold_price()
-                else:
-                    current_price = get_btc_price()
+                # Get current price from OANDA
+                current_price = get_oanda_price(pair)
                 
                 if not current_price:
+                    logger.warning(f"Could not get price for {pair}")
                     continue
                 
                 # Calculate pips
@@ -401,27 +448,33 @@ def monitor_profits():
                     else:
                         pips = int(entry_price - current_price)
                 
+                logger.info(f"Trade {trade_id}: Entry={entry_price}, Current={current_price}, Pips={pips}")
+                
                 # Check profit levels
-                for level_pips in sorted(PROFIT_LEVELS.keys()):
+                for level_pips in sorted(MESSAGE_TEMPLATES.keys()):
+                    if isinstance(level_pips, str):
+                        continue
+                    
                     if pips >= level_pips and level_pips not in reported_levels.get(trade_id, set()):
                         # Check cooldown
                         if not check_cooldown(trade_id, level_pips):
+                            logger.info(f"Cooldown active for {trade_id} level {level_pips}")
                             continue
                         
-                        # Get profit amount
-                        £_range = PROFIT_LEVELS[level_pips]["£_range"]
-                        profit_gbp = round(random.uniform(£_range[0], £_range[1]), 2)
+                        # Get random profit amount for display
+                        profit_ranges = {
+                            20: (20, 35),
+                            40: (50, 70),
+                            60: (75, 80),
+                            80: (80, 110),
+                            100: (120, 160),
+                        }
                         
-                        # Generate message
-                        label = PROFIT_LEVELS[level_pips].get("label", f"{level_pips} PIPS IN PROFIT 📈")
-                        explanation = random.choice(EXPLANATIONS["BUY_ENTRY" if direction == "BUY" else "SELL_ENTRY"])
+                        profit_range = profit_ranges.get(level_pips, (100, 150))
+                        profit_gbp = round(random.uniform(profit_range[0], profit_range[1]), 2)
                         
-                        text = (
-                            f"<b>{label}</b>\n\n"
-                            f"+£{profit_gbp:,.2f}\n\n"
-                            f"0.11 Lots | +{level_pips} PIPS\n\n"
-                            f"💡 {explanation}"
-                        )
+                        # Get random message template
+                        text = random.choice(MESSAGE_TEMPLATES[level_pips])
                         
                         # Get chart
                         chart = get_chart_image(pair)
@@ -430,8 +483,9 @@ def monitor_profits():
                             image_bytes = generate_profit_overlay(pair, level_pips, profit_gbp, chart)
                         
                         # Send
+                        logger.info(f"📤 Sending {level_pips} pips message for {trade_id}")
                         future = asyncio.run_coroutine_threadsafe(
-                            send_to_vantage(text, image_bytes),
+                            send_to_telegram(text, image_bytes),
                             loop
                         )
                         try:
@@ -440,8 +494,10 @@ def monitor_profits():
                             with trade_lock:
                                 if trade_id in reported_levels:
                                     reported_levels[trade_id].add(level_pips)
-                        except:
-                            pass
+                            
+                            logger.info(f"✅ {level_pips} pips message sent!")
+                        except Exception as e:
+                            logger.error(f"Send failed: {e}")
         
         except Exception as e:
             logger.error(f"Monitor error: {e}")
@@ -453,48 +509,6 @@ threading.Thread(target=monitor_profits, daemon=True).start()
 
 
 # ═══════════════════════════════════════════════════════════
-# PRICE FETCHING
-# ═══════════════════════════════════════════════════════════
-
-def get_gold_price():
-    try:
-        if TWELVE_DATA_KEY:
-            r = requests.get(f"https://api.twelvedata.com/price?symbol=XAU/USD&apikey={TWELVE_DATA_KEY}", timeout=5)
-            if r.status_code == 200:
-                p = float(r.json().get("price", 0))
-                if p > 3000:
-                    return p
-    except:
-        pass
-    
-    try:
-        r = requests.get("https://api.metals.live/v1/spot/gold", timeout=6)
-        if r.status_code == 200:
-            data = r.json()
-            if isinstance(data, list) and data:
-                p = float(data[0].get("gold", 0))
-                if p > 3000:
-                    return p
-    except:
-        pass
-    
-    return None
-
-
-def get_btc_price():
-    try:
-        r = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT", timeout=5)
-        if r.status_code == 200:
-            p = float(r.json()["price"])
-            if p > 0:
-                return p
-    except:
-        pass
-    
-    return None
-
-
-# ═══════════════════════════════════════════════════════════
 # HEALTH CHECK
 # ═══════════════════════════════════════════════════════════
 
@@ -503,11 +517,14 @@ def health():
     with trade_lock:
         active_count = len([t for t in active_trades.values() if t["status"] == "open"])
     
+    mode = "🟢 SAVED MESSAGES (Testing)" if SEND_TO_SAVED else "🔵 VANTAGE GROUP (Live)"
+    
     return (
-        f"✅ Trade Alert Bot Running!\n"
-        f"Vantage Group: {VANTAGE_GROUP_ID}\n"
+        f"✅ Trade Alert Bot v2 Running!\n"
+        f"Mode: {mode}\n"
         f"Active Trades: {active_count}\n"
-        f"Client: {'Connected' if client else 'Disconnected'}\n"
+        f"Client: {'Connected ✅' if client else 'Disconnected ❌'}\n"
+        f"OANDA: {'Connected ✅' if OANDA_API_KEY else 'No API key ❌'}\n"
     )
 
 
@@ -518,6 +535,14 @@ def reset():
         reported_levels.clear()
     
     return "All trades cleared! ✅"
+
+
+@app.route("/switch_mode", methods=["GET"])
+def switch_mode():
+    global SEND_TO_SAVED
+    SEND_TO_SAVED = not SEND_TO_SAVED
+    mode = "SAVED MESSAGES" if SEND_TO_SAVED else "VANTAGE GROUP"
+    return f"Switched to {mode}! ✅"
 
 
 if __name__ == "__main__":
