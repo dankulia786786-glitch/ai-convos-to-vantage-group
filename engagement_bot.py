@@ -251,6 +251,18 @@ def get_oanda_price(pair):
     return None
 
 
+# Live prices streamed from MT5 EA (preferred when fresh)
+mt5_prices = {"XAUUSD": None, "BTCUSD": None, "ts": 0}
+MT5_FRESH_SECONDS = 30  # if no update within this window, fall back to OANDA
+
+
+def get_price(pair):
+    """Prefer MT5 feed if it's fresh; otherwise fall back to OANDA."""
+    if mt5_prices.get(pair) is not None and (time.time() - mt5_prices["ts"]) <= MT5_FRESH_SECONDS:
+        return mt5_prices[pair]
+    return get_oanda_price(pair)
+
+
 async def send_to_telegram(text):
     global client
     try:
@@ -291,7 +303,7 @@ def monitor_profits():
             for tid, t in trades_copy.items():
                 if t["status"] != "open":
                     continue
-                price = get_oanda_price(t["pair"])
+                price = get_price(t["pair"])
                 if not price:
                     continue
                 hit_sl = (price <= t["sl"]) if t["direction"] == "BUY" else (price >= t["sl"])
@@ -391,6 +403,39 @@ def test_signal():
                 if ok else "Send failed"), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/mt5_price", methods=["POST"])
+def mt5_price():
+    """Receive live prices streamed from the MT5 EA."""
+    try:
+        data = request.get_json(force=True)
+        if "XAUUSD" in data:
+            mt5_prices["XAUUSD"] = float(data["XAUUSD"])
+        if "BTCUSD" in data:
+            mt5_prices["BTCUSD"] = float(data["BTCUSD"])
+        mt5_prices["ts"] = time.time()
+        return jsonify({"status": "ok"}), 200
+    except Exception as e:
+        logger.error(f"mt5_price error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/price", methods=["GET"])
+def price():
+    """Show MT5 (if fresh) and OANDA prices side by side. /price?pair=GOLD"""
+    p = request.args.get("pair", "GOLD").upper()
+    pair = "BTCUSD" if ("BTC" in p or "BITCOIN" in p) else "XAUUSD"
+    oanda = get_oanda_price(pair)
+    age = time.time() - mt5_prices["ts"] if mt5_prices["ts"] else None
+    mt5_val = mt5_prices.get(pair)
+    fresh = (mt5_val is not None and age is not None and age <= MT5_FRESH_SECONDS)
+    lines = [f"Pair: {pair}"]
+    lines.append(f"MT5 feed: {mt5_val if mt5_val is not None else 'none yet'}"
+                 + (f"  ({age:.0f}s ago, {'FRESH' if fresh else 'STALE'})" if age is not None else ""))
+    lines.append(f"OANDA: {oanda if oanda is not None else 'none'}")
+    lines.append(f"Bot will use: {'MT5' if fresh else 'OANDA'}")
+    return "\n".join(lines), 200
 
 
 @app.route("/test/<level>", methods=["GET"])
