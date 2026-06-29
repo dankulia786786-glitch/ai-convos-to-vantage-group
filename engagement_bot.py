@@ -375,9 +375,11 @@ def mt5_close():
             logger.warning(f"Unknown close type: {close_type}")
             return jsonify({"status": "ignored"}), 200
         
-        future = asyncio.run_coroutine_threadsafe(send_to_telegram(text), loop)
+        future = asyncio.run_coroutine_threadsafe(
+            send_chart_with_caption(get_chart_image(pair), text), loop
+        )
         try:
-            result = future.result(timeout=15)
+            result = future.result(timeout=25)
             if result:
                 logger.info(f"✅ {close_type} message sent")
         except Exception as e:
@@ -440,12 +442,13 @@ def monitor_profits():
                         text = random.choice(MESSAGE_TEMPLATES[level_pips])
                         
                         logger.info(f"📤 Sending {level_pips} pips alert for {trade_id}")
+                        chart = get_chart_image(pair)
                         future = asyncio.run_coroutine_threadsafe(
-                            send_to_telegram(text),
+                            send_chart_with_caption(chart, text),
                             loop
                         )
                         try:
-                            result = future.result(timeout=15)
+                            result = future.result(timeout=25)
                             
                             if result:
                                 with trade_lock:
@@ -666,12 +669,17 @@ def test_message(level):
         key = mapping[level]
         text = random.choice(MESSAGE_TEMPLATES[key])
 
-        future = asyncio.run_coroutine_threadsafe(send_to_telegram(text), loop)
-        result = future.result(timeout=15)
+        pair = request.args.get("pair", "XAUUSD").upper()
+        chart = get_chart_image(pair)
+        future = asyncio.run_coroutine_threadsafe(
+            send_chart_with_caption(chart, text), loop
+        )
+        result = future.result(timeout=25)
 
         dest = "Saved Messages" if SEND_TO_SAVED else "VANTAGE GROUP"
         if result:
-            return f"✅ Test '{level}' message sent to {dest}! Check Telegram.", 200
+            note = "" if chart else " (no chart — check CHART_IMG_KEY)"
+            return f"✅ Test '{level}' sent to {dest}!{note} Check Telegram.", 200
         else:
             return f"❌ Failed to send. Client may be disconnected.", 500
 
