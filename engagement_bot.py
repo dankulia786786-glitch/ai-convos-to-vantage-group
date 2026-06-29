@@ -388,32 +388,38 @@ threading.Thread(target=monitor_profits, daemon=True).start()
 # TELEGRAM AUTHENTICATION (Generate Session String)
 # ═══════════════════════════════════════════════════════════
 
-temp_client = None
-phone_number = None
+temp_clients = {}
+
+def run_async(coro):
+    """Run async code in the main event loop"""
+    try:
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
+        return future.result(timeout=15)
+    except Exception as e:
+        raise e
 
 @app.route("/send_code", methods=["GET"])
 def send_code():
     """Send verification code to phone"""
-    global temp_client, phone_number
-    
     try:
-        phone = VANTAGE_PHONE  # Use the phone from Railway variables
-        phone_number = phone
+        phone = VANTAGE_PHONE
+        if not phone:
+            return jsonify({"status": "error", "message": "VANTAGE_PHONE not set in Railway"}), 400
         
         temp_client = TelegramClient(StringSession(), API_ID, API_HASH)
+        temp_clients['current'] = temp_client
         
         async def send():
             await temp_client.connect()
-            result = await temp_client.send_code_request(phone)
-            return result
+            await temp_client.send_code_request(phone)
+            return phone
         
-        future = asyncio.run_coroutine_threadsafe(send(), loop)
-        result = future.result(timeout=10)
+        result_phone = run_async(send())
         
         return jsonify({
             "status": "success",
-            "message": f"Code sent to {phone}",
-            "instructions": "Go to /verify?code=YOUR_CODE to verify"
+            "message": f"✅ Code sent to {result_phone}",
+            "next_step": f"Visit: /verify?code=YOUR_CODE"
         }), 200
         
     except Exception as e:
@@ -424,34 +430,29 @@ def send_code():
 @app.route("/verify", methods=["GET"])
 def verify():
     """Verify code and return session string"""
-    global temp_client, phone_number
-    
     try:
         code = request.args.get("code", "")
         
         if not code:
             return jsonify({"status": "error", "message": "No code provided"}), 400
         
-        if not temp_client or not phone_number:
-            return jsonify({"status": "error", "message": "No active session. Call /send_code first"}), 400
+        if 'current' not in temp_clients:
+            return jsonify({"status": "error", "message": "Call /send_code first"}), 400
+        
+        temp_client = temp_clients['current']
         
         async def verify_code():
-            try:
-                await temp_client.sign_in(phone_number, code)
-                session_string = temp_client.session.save()
-                await temp_client.disconnect()
-                return session_string
-            except Exception as e:
-                raise e
+            await temp_client.sign_in(VANTAGE_PHONE, code)
+            session = temp_client.session.save()
+            await temp_client.disconnect()
+            return session
         
-        future = asyncio.run_coroutine_threadsafe(verify_code(), loop)
-        session_string = future.result(timeout=10)
+        session_string = run_async(verify_code())
         
         return jsonify({
             "status": "success",
-            "message": "Login successful!",
             "session_string": session_string,
-            "instructions": "Copy the session_string above and update Railway variables with this value"
+            "message": "✅ Copy session_string and update VANTAGE_SESSION_STRING in Railway"
         }), 200
         
     except Exception as e:
