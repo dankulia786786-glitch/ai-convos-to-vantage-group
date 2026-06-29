@@ -402,15 +402,13 @@ def send_code():
         
         temp_client = TelegramClient(StringSession(), API_ID, API_HASH)
         
-        loop_temp = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop_temp)
-        
         async def send():
             await temp_client.connect()
             result = await temp_client.send_code_request(phone)
             return result
         
-        result = loop_temp.run_until_complete(send())
+        future = asyncio.run_coroutine_threadsafe(send(), loop)
+        result = future.result(timeout=10)
         
         return jsonify({
             "status": "success",
@@ -437,9 +435,6 @@ def verify():
         if not temp_client or not phone_number:
             return jsonify({"status": "error", "message": "No active session. Call /send_code first"}), 400
         
-        loop_temp = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop_temp)
-        
         async def verify_code():
             try:
                 await temp_client.sign_in(phone_number, code)
@@ -449,7 +444,8 @@ def verify():
             except Exception as e:
                 raise e
         
-        session_string = loop_temp.run_until_complete(verify_code())
+        future = asyncio.run_coroutine_threadsafe(verify_code(), loop)
+        session_string = future.result(timeout=10)
         
         return jsonify({
             "status": "success",
