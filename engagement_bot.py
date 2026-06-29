@@ -207,6 +207,7 @@ def build_entry_post(sig):
         f"\U0001f4a1 {reasoning}"
     )
     trade = {"pair": pair, "direction": direction, "entry_price": base,
+             "profit_anchor": (ehigh if direction == "BUY" else elow),
              "tp1": tp1, "tp2": tp2, "sl": sl, "timestamp": time.time(), "status": "open"}
     return post, trade
 
@@ -315,7 +316,7 @@ def monitor_profits():
                         reported_levels.pop(tid, None)
                     logger.info(f"SL hit {tid}")
                     continue
-                pips = pips_in_profit(t["pair"], t["direction"], t["entry_price"], price)
+                pips = pips_in_profit(t["pair"], t["direction"], t.get("profit_anchor", t["entry_price"]), price)
                 for lvl in levels:
                     if pips >= lvl and lvl not in reported_levels.get(tid, set()):
                         txt = random.choice(MESSAGE_TEMPLATES[lvl])
