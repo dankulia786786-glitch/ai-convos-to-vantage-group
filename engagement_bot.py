@@ -6,8 +6,6 @@ import time
 import json
 import random
 from datetime import datetime
-from io import BytesIO
-from PIL import Image, ImageDraw, ImageFont
 from flask import Flask, request, jsonify
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -148,100 +146,7 @@ MESSAGE_TEMPLATES = {
 }
 
 
-# ═══════════════════════════════════════════════════════════
-# CHART & IMAGE GENERATION
-# ═══════════════════════════════════════════════════════════
 
-def get_chart_image(pair):
-    """Fetch trading view chart"""
-    if not CHART_IMG_KEY:
-        return None
-    
-    try:
-        symbol = "OANDA:XAUUSD" if pair == "XAUUSD" else "COINBASE:BTCUSD"
-        url = (
-            f"https://api.chart-img.com/v1/tradingview/advanced-chart"
-            f"?symbol={symbol}&interval=5m&theme=dark"
-            f"&studies=MASimple@tv-basicstudies,RSI@tv-basicstudies"
-            f"&key={CHART_IMG_KEY}"
-        )
-        
-        r = requests.get(url, timeout=10)
-        if r.status_code == 200 and "image" in r.headers.get("content-type", ""):
-            return r.content
-    except Exception as e:
-        logger.error(f"Chart image error: {e}")
-    
-    return None
-
-
-def find_font(bold=True, size=54):
-    """Find available font"""
-    candidates = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    ]
-    
-    for path in candidates:
-        try:
-            if os.path.exists(path):
-                return ImageFont.truetype(path, size)
-        except:
-            pass
-    
-    return ImageFont.load_default()
-
-
-def generate_profit_overlay(pair, pips, profit_gbp, chart_bytes=None):
-    """Generate profit card image"""
-    try:
-        if chart_bytes:
-            chart_img = Image.open(BytesIO(chart_bytes)).convert("RGB")
-        else:
-            chart_img = Image.new("RGB", (800, 400), (10, 10, 15))
-        
-        CW, CH = chart_img.size
-        band_h = int(CH * 0.22)
-        band = Image.new("RGB", (CW, band_h), (8, 8, 12))
-        draw = ImageDraw.Draw(band)
-        
-        draw.rectangle([0, 0, CW, 5], fill=(212, 175, 55))
-        draw.rectangle([0, band_h - 5, CW, band_h], fill=(212, 175, 55))
-        
-        font_profit = find_font(bold=True, size=int(band_h * 0.52))
-        font_label = find_font(bold=True, size=int(band_h * 0.22))
-        font_small = find_font(bold=True, size=int(band_h * 0.17))
-        
-        label = f"{pips} PIPS IN PROFIT 📈"
-        profit_str = f"+£{profit_gbp:,.2f}"
-        detail_str = f"0.11 Lots  |  +{pips} PIPS"
-        
-        bbox = draw.textbbox((0, 0), label, font=font_label)
-        tw = bbox[2] - bbox[0]
-        draw.text(((CW - tw) // 2, 8), label, font=font_label, fill=(255, 255, 255))
-        
-        bbox = draw.textbbox((0, 0), profit_str, font=font_profit)
-        tw = bbox[2] - bbox[0]
-        py = int(band_h * 0.28)
-        draw.text(((CW - tw) // 2 + 3, py + 3), profit_str, font=font_profit, fill=(0, 60, 0))
-        draw.text(((CW - tw) // 2, py), profit_str, font=font_profit, fill=(0, 230, 80))
-        
-        bbox = draw.textbbox((0, 0), detail_str, font=font_small)
-        tw = bbox[2] - bbox[0]
-        draw.text(((CW - tw) // 2, band_h - int(band_h * 0.22)), detail_str, font=font_small, fill=(212, 175, 55))
-        
-        combined = Image.new("RGB", (CW, CH + band_h))
-        combined.paste(chart_img, (0, 0))
-        combined.paste(band, (0, CH))
-        
-        buf = BytesIO()
-        combined.save(buf, format="JPEG", quality=92)
-        buf.seek(0)
-        return buf.read()
-    
-    except Exception as e:
-        logger.error(f"Profit overlay error: {e}")
-        return chart_bytes
 
 
 # ═══════════════════════════════════════════════════════════
@@ -282,7 +187,7 @@ def get_oanda_price(pair):
 # TELEGRAM MESSAGE SENDING
 # ═══════════════════════════════════════════════════════════
 
-async def send_to_telegram(text, image_bytes=None):
+async def send_to_telegram(text):
     """Send message to Saved Messages or Vantage group"""
     global client
     
@@ -298,21 +203,12 @@ async def send_to_telegram(text, image_bytes=None):
             # Send to Vantage group
             entity = await client.get_entity(VANTAGE_GROUP_ID)
         
-        if image_bytes:
-            await client.send_file(
-                entity,
-                image_bytes,
-                caption=text,
-                parse_mode='html',
-                reply_to=VANTAGE_TOPIC_ID if not SEND_TO_SAVED else None
-            )
-        else:
-            await client.send_message(
-                entity,
-                text,
-                parse_mode='html',
-                reply_to=VANTAGE_TOPIC_ID if not SEND_TO_SAVED else None
-            )
+        await client.send_message(
+            entity,
+            text,
+            parse_mode='html',
+            reply_to=VANTAGE_TOPIC_ID if not SEND_TO_SAVED else None
+        )
         
         logger.info(f"✅ Message sent")
         return True
@@ -476,16 +372,10 @@ def monitor_profits():
                         # Get random message template
                         text = random.choice(MESSAGE_TEMPLATES[level_pips])
                         
-                        # Get chart
-                        chart = get_chart_image(pair)
-                        image_bytes = None
-                        if chart:
-                            image_bytes = generate_profit_overlay(pair, level_pips, profit_gbp, chart)
-                        
-                        # Send
+                        # Send text message only
                         logger.info(f"📤 Sending {level_pips} pips message for {trade_id}")
                         future = asyncio.run_coroutine_threadsafe(
-                            send_to_telegram(text, image_bytes),
+                            send_to_telegram(text),
                             loop
                         )
                         try:
