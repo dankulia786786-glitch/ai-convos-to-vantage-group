@@ -527,6 +527,47 @@ def switch_mode():
     return f"✅ Switched to {mode}!", 200
 
 
+@app.route("/test/<level>", methods=["GET"])
+def test_message(level):
+    """Browser-friendly test: visit /test/20, /test/40, /test/60, /test/80,
+    /test/tp1, /test/tp2, /test/tp3, or /test/sl to send a sample message."""
+    try:
+        level = level.lower()
+
+        mapping = {
+            "20": 20,
+            "40": 40,
+            "60": 60,
+            "80": 80,
+            "tp1": 100,
+            "tp2": "TP2",
+            "tp3": "TP3",
+            "sl": "SL",
+        }
+
+        if level not in mapping:
+            return jsonify({
+                "status": "error",
+                "message": "Use one of: /test/20 /test/40 /test/60 /test/80 /test/tp1 /test/tp2 /test/tp3 /test/sl"
+            }), 400
+
+        key = mapping[level]
+        text = random.choice(MESSAGE_TEMPLATES[key])
+
+        future = asyncio.run_coroutine_threadsafe(send_to_telegram(text), loop)
+        result = future.result(timeout=15)
+
+        dest = "Saved Messages" if SEND_TO_SAVED else "VANTAGE GROUP"
+        if result:
+            return f"✅ Test '{level}' message sent to {dest}! Check Telegram.", 200
+        else:
+            return f"❌ Failed to send. Client may be disconnected.", 500
+
+    except Exception as e:
+        logger.error(f"Test message error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @app.route("/status", methods=["GET"])
 def status():
     """Get detailed trade status"""
