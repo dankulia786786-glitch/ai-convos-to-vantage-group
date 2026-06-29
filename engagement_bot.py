@@ -385,6 +385,85 @@ threading.Thread(target=monitor_profits, daemon=True).start()
 
 
 # ═══════════════════════════════════════════════════════════
+# TELEGRAM AUTHENTICATION (Generate Session String)
+# ═══════════════════════════════════════════════════════════
+
+temp_client = None
+phone_number = None
+
+@app.route("/send_code", methods=["GET"])
+def send_code():
+    """Send verification code to phone"""
+    global temp_client, phone_number
+    
+    try:
+        phone = os.environ.get("PHONE", "+447418355138")
+        phone_number = phone
+        
+        temp_client = TelegramClient(StringSession(), API_ID, API_HASH)
+        
+        loop_temp = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop_temp)
+        
+        async def send():
+            await temp_client.connect()
+            result = await temp_client.send_code_request(phone)
+            return result
+        
+        result = loop_temp.run_until_complete(send())
+        
+        return jsonify({
+            "status": "success",
+            "message": f"Code sent to {phone}",
+            "instructions": "Go to /verify?code=YOUR_CODE to verify"
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Send code error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/verify", methods=["GET"])
+def verify():
+    """Verify code and return session string"""
+    global temp_client, phone_number
+    
+    try:
+        code = request.args.get("code", "")
+        
+        if not code:
+            return jsonify({"status": "error", "message": "No code provided"}), 400
+        
+        if not temp_client or not phone_number:
+            return jsonify({"status": "error", "message": "No active session. Call /send_code first"}), 400
+        
+        loop_temp = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop_temp)
+        
+        async def verify_code():
+            try:
+                await temp_client.sign_in(phone_number, code)
+                session_string = temp_client.session.save()
+                await temp_client.disconnect()
+                return session_string
+            except Exception as e:
+                raise e
+        
+        session_string = loop_temp.run_until_complete(verify_code())
+        
+        return jsonify({
+            "status": "success",
+            "message": "Login successful!",
+            "session_string": session_string,
+            "instructions": "Copy the session_string above and update Railway variables with this value"
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Verify error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════
 # HEALTH CHECK & UTILITIES
 # ═══════════════════════════════════════════════════════════
 
