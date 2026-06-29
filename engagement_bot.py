@@ -3,41 +3,52 @@ import asyncio
 import threading
 import logging
 import time
-import requests
+import json
 import random
 from datetime import datetime
-from zoneinfo import ZoneInfo
+from io import BytesIO
+from PIL import Image, ImageDraw, ImageFont
 from flask import Flask, request, jsonify
 from telethon import TelegramClient
 from telethon.sessions import StringSession
+import requests
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# Environment Variables
+# ═══════════════════════════════════════════════════════════
+# ENVIRONMENT VARIABLES
+# ═══════════════════════════════════════════════════════════
+
 API_ID = int(os.environ.get("API_ID", "0"))
 API_HASH = os.environ.get("API_HASH", "")
-PHONE = os.environ.get("PHONE", "")
-SESSION_STRING = os.environ.get("SESSION_STRING", "")
-
-VANTAGE_GROUP_ID = os.environ.get("VANTAGE_GROUP_ID", "")
+VANTAGE_SESSION_STRING = os.environ.get("VANTAGE_SESSION_STRING", "")
+VANTAGE_PHONE = os.environ.get("VANTAGE_PHONE", "")
+VANTAGE_GROUP_ID = int(os.environ.get("VANTAGE_GROUP_ID", "0"))
 VANTAGE_TOPIC_ID = int(os.environ.get("VANTAGE_TOPIC_ID", "0"))
 
-USER_CHANNEL_ID = -1004447151625  # Your FREE GOLD & BTC SIGNALS channel
+CHART_IMG_KEY = os.environ.get("CHART_IMG_KEY", "")
+TWELVE_DATA_KEY = os.environ.get("TWELVE_DATA_KEY", "")
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-ALPHA_VANTAGE_KEY = os.environ.get("ALPHA_VANTAGE_KEY", "")
+# ═══════════════════════════════════════════════════════════
+# GLOBAL STATE
+# ═══════════════════════════════════════════════════════════
 
-ENABLE_GROUP_SEND = os.environ.get("ENABLE_GROUP_SEND", "false").lower() == "true"
-
-# Global state
 client = None
 loop = asyncio.new_event_loop()
-engagement_running = False
-last_posted_time = 0
-last_promo_time = 0
+
+# Track open trades
+active_trades = {}
+trade_lock = threading.Lock()
+
+# Track message cooldowns (prevent spam)
+last_message_time = {}
+message_cooldown_seconds = 1800  # 30 minutes
+
+# Price levels already reported for each trade
+reported_levels = {}
 
 
 def run_loop():
@@ -48,727 +59,465 @@ def run_loop():
 threading.Thread(target=run_loop, daemon=True).start()
 
 
+# ═══════════════════════════════════════════════════════════
+# TELETHON CLIENT INITIALIZATION
+# ═══════════════════════════════════════════════════════════
+
 async def init_client():
     global client
-
-    if not API_ID or not API_HASH:
-        logger.error("API_ID or API_HASH missing")
-        return False
-
-    if SESSION_STRING:
-        client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
-        await client.connect()
-
-        if await client.is_user_authorized():
-            logger.info("Logged in via session string")
-            return True
-
-        logger.error("Session string invalid")
-        return False
-
-    client = TelegramClient(StringSession(), API_ID, API_HASH)
-    await client.connect()
-    logger.info("No session string. Login via /send_code")
+    try:
+        if VANTAGE_SESSION_STRING and VANTAGE_PHONE:
+            client = TelegramClient(
+                StringSession(VANTAGE_SESSION_STRING),
+                API_ID,
+                API_HASH
+            )
+            await client.connect()
+            
+            if await client.is_user_authorized():
+                me = await client.get_me()
+                logger.info(f"✅ Logged in as {me.first_name} ({me.username})")
+                return True
+    except Exception as e:
+        logger.error(f"Client init error: {e}")
+    
     return False
 
 
+# Initialize client on startup
 future = asyncio.run_coroutine_threadsafe(init_client(), loop)
-try:
-    future.result(timeout=30)
-except Exception as e:
-    logger.error(f"Init error: {e}")
+future.result(timeout=10)
 
 
-def get_uk_time():
-    """Get current time in UK timezone"""
-    return datetime.now(ZoneInfo("Europe/London"))
+# ═══════════════════════════════════════════════════════════
+# PROFIT RANGES & EXPLANATIONS
+# ═══════════════════════════════════════════════════════════
+
+PROFIT_LEVELS = {
+    20: {"£_range": (20, 35), "pips": 20},
+    40: {"£_range": (50, 70), "pips": 40},
+    60: {"£_range": (75, 80), "pips": 60},
+    80: {"£_range": (80, 110), "pips": 80},
+    100: {"£_range": (120, 160), "pips": 100, "label": "TP1 SMASHED ✅✅✅"},
+}
+
+EXPLANATIONS = {
+    "BUY_ENTRY": [
+        "Bullish momentum confirmed. Price above key support level.",
+        "Buyers stepping in at demand zone. Upside targets identified.",
+        "Break above resistance structure. Smart money long from here.",
+    ],
+    "SELL_ENTRY": [
+        "Bearish structure intact. Rejection from supply zone confirmed.",
+        "Sellers in control. Price below key resistance level.",
+        "Liquidity sweep complete. Smart money short from here.",
+    ],
+}
 
 
-def is_market_hours():
-    """Check if we're in active market hours (6 AM - 11 PM UK time)"""
-    uk_time = get_uk_time()
-    hour = uk_time.hour
-    return 6 <= hour < 23
+# ═══════════════════════════════════════════════════════════
+# CHART & IMAGE GENERATION
+# ═══════════════════════════════════════════════════════════
 
-
-def get_next_post_delay():
-    """Return random delay 5-15 minutes with variation"""
-    return random.randint(300, 900)
-
-
-def get_live_prices():
-    """Fetch REAL LIVE prices - BTC & Gold. Try Gold-API first, then Yahoo fallback"""
-    prices = {}
-    
-    # Get REAL Gold from Gold-API (primary)
-    try:
-        response = requests.get(
-            "https://api.gold-api.com/price/XAU/USD",
-            timeout=5
-        )
-        data = response.json()
-        if "price" in data:
-            prices["gold"] = float(data["price"])
-            logger.info(f"✅ Gold from Gold-API: ${prices['gold']}")
-    except Exception as e:
-        logger.warning(f"Gold-API failed: {e}, trying Yahoo...")
-        prices["gold"] = None
-    
-    # Fallback: Get Gold from Yahoo Finance
-    if prices.get("gold") is None:
-        try:
-            response = requests.get(
-                "https://query1.finance.yahoo.com/v8/finance/chart/GC=F",
-                params={"interval": "1h", "range": "30d"},
-                headers={"User-Agent": "Mozilla/5.0"},
-                timeout=10
-            )
-            data = response.json()
-            closes = data.get("chart", {}).get("result", [{}])[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
-            closes = [float(x) for x in closes if x is not None]
-            if closes:
-                prices["gold"] = closes[-1]
-                logger.info(f"✅ Gold from Yahoo: ${prices['gold']}")
-        except Exception as e:
-            logger.error(f"Yahoo Gold failed: {e}")
-            prices["gold"] = None
-    
-    # Get REAL BTC from Gold-API (primary)
-    try:
-        response = requests.get(
-            "https://api.gold-api.com/price/BTC/USD",
-            timeout=5
-        )
-        data = response.json()
-        if "price" in data:
-            prices["btc"] = float(data["price"])
-            logger.info(f"✅ BTC from Gold-API: ${prices['btc']:,.0f}")
-    except Exception as e:
-        logger.warning(f"Gold-API BTC failed: {e}, trying Yahoo...")
-        prices["btc"] = None
-    
-    # Fallback: Get BTC from Yahoo Finance
-    if prices.get("btc") is None:
-        try:
-            response = requests.get(
-                "https://query1.finance.yahoo.com/v8/finance/chart/BTC-USD",
-                params={"interval": "1h", "range": "30d"},
-                headers={"User-Agent": "Mozilla/5.0"},
-                timeout=10
-            )
-            data = response.json()
-            closes = data.get("chart", {}).get("result", [{}])[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
-            closes = [float(x) for x in closes if x is not None]
-            if closes:
-                prices["btc"] = closes[-1]
-                logger.info(f"✅ BTC from Yahoo: ${prices['btc']:,.0f}")
-        except Exception as e:
-            logger.error(f"Yahoo BTC failed: {e}")
-            prices["btc"] = None
-    
-    return prices
-
-
-async def get_last_messages(limit=5):
-    """Get last N messages from group"""
-    global client
+def get_chart_image(pair):
+    """Fetch trading view chart"""
+    if not CHART_IMG_KEY:
+        return None
     
     try:
-        if not client or not await client.is_user_authorized():
-            logger.error("Not logged in")
-            return []
-        
-        entity = await client.get_entity(VANTAGE_GROUP_ID)
-        messages = []
-        
-        async for message in client.iter_messages(entity, limit=limit):
-            if message.text:
-                sender = "Unknown"
-                if message.sender:
-                    try:
-                        user = await client.get_entity(message.sender)
-                        sender = user.first_name or "Unknown"
-                    except:
-                        sender = "Unknown"
-                
-                messages.append({
-                    "sender": sender,
-                    "text": message.text,
-                    "message_id": message.id
-                })
-        
-        messages.reverse()
-        return messages
-        
-    except Exception as e:
-        logger.error(f"Error getting messages: {e}")
-        return []
-
-
-async def get_last_messages_with_ids(limit=30):
-    """Get last N messages with message IDs for replies"""
-    global client
-    
-    try:
-        if not client or not await client.is_user_authorized():
-            logger.error("Not logged in")
-            return []
-        
-        entity = await client.get_entity(VANTAGE_GROUP_ID)
-        messages = []
-        
-        async for message in client.iter_messages(entity, limit=limit):
-            if message.text and not message.text.startswith("🚨"):
-                sender = "Unknown"
-                sender_id = None
-                if message.sender:
-                    try:
-                        user = await client.get_entity(message.sender)
-                        sender = user.first_name or "Unknown"
-                        sender_id = user.id
-                    except:
-                        sender = "Unknown"
-                
-                messages.append({
-                    "sender": sender,
-                    "sender_id": sender_id,
-                    "text": message.text,
-                    "message_id": message.id
-                })
-        
-        messages.reverse()
-        return messages
-        
-    except Exception as e:
-        logger.error(f"Error getting messages with IDs: {e}")
-        return []
-
-
-def generate_reply_to_message(user_message, sender_name, prices):
-    """Generate contextual reply to user message using Claude"""
-    
-    gold_price = prices["gold"]
-    btc_price = int(prices["btc"])
-    
-    prompt = f"""You are Charlie, a 21-year-old trader in a Telegram group. Someone just said something and you're replying to help them.
-
-Their message: "{user_message}"
-Their name: {sender_name}
-
-REAL LIVE PRICES RIGHT NOW:
-- Gold: ${gold_price:.2f}
-- BTC: ${btc_price:,}
-
-Generate ONE helpful, human reply (1-2 sentences MAX) that:
-- Directly addresses what they said
-- Is humorous or casual, but factual
-- Gives them direction or help based on current prices
-- Sounds like a real trader responding
-- NO "ALERT" language
-- Use emojis naturally (maybe)
-
-Examples of good replies:
-- "Yeah that was a classic fake pump. Low volume always tells the story 📊"
-- "Gold looking tired here ngl. Could see pullback to $3980 before next move 👀"
-- "That's the right mindset. Patience > chasing 💯"
-- "Structure looks good but wait for confirmation. Don't FOMO in lol 😅"
-
-Generate ONLY the reply text, nothing else."""
-
-    try:
-        response = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01"
-            },
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 100,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ]
-            },
-            timeout=15
+        symbol = "OANDA:XAUUSD" if pair == "XAUUSD" else "COINBASE:BTCUSD"
+        url = (
+            f"https://api.chart-img.com/v1/tradingview/advanced-chart"
+            f"?symbol={symbol}&interval=5m&theme=dark"
+            f"&studies=MASimple@tv-basicstudies,RSI@tv-basicstudies"
+            f"&key={CHART_IMG_KEY}"
         )
         
-        data = response.json()
-        
-        if "content" in data and len(data["content"]) > 0:
-            reply_text = data["content"][0]["text"].strip()
-            return reply_text
-        
+        r = requests.get(url, timeout=10)
+        if r.status_code == 200 and "image" in r.headers.get("content-type", ""):
+            return r.content
     except Exception as e:
-        logger.error(f"Claude reply generation error: {e}")
+        logger.error(f"Chart image error: {e}")
     
     return None
 
 
-def generate_contextual_response(messages_context, prices):
-    """Generate contextual response using Claude with BTC & Gold only"""
+def find_font(bold=True, size=54):
+    """Find available font"""
+    candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    ]
     
-    if not messages_context:
-        return None
+    for path in candidates:
+        try:
+            if os.path.exists(path):
+                return ImageFont.truetype(path, size)
+        except:
+            pass
     
-    context_text = "\n".join([f"{m['sender']}: {m['text']}" for m in messages_context[-5:]])
-    
-    gold_price = prices["gold"]
-    btc_price = int(prices["btc"])
-    
-    prompt = f"""You are a 21-year-old trader in a Telegram group chat with 14,000 people. 
+    return ImageFont.load_default()
 
-Recent chat:
-{context_text}
 
-REAL LIVE prices RIGHT NOW:
-- Gold: ${gold_price}
-- BTC: ${btc_price:,}
-
-Generate ONE natural, conversational response (1-2 sentences MAX) that:
-- Flows naturally into this discussion
-- References what people just said
-- Use the ACTUAL LIVE PRICES naturally in your response
-- Sounds like a real trader
-- NO emojis or excessive punctuation
-- NO "ALERT" or "UPDATE" language
-
-Generate ONLY the response text, nothing else."""
-
+def generate_profit_overlay(pair, pips, profit_gbp, chart_bytes=None):
+    """Generate profit card image"""
     try:
-        response = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01"
-            },
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 100,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ]
-            },
-            timeout=15
-        )
+        if chart_bytes:
+            chart_img = Image.open(BytesIO(chart_bytes)).convert("RGB")
+        else:
+            chart_img = Image.new("RGB", (800, 400), (10, 10, 15))
         
-        data = response.json()
+        CW, CH = chart_img.size
+        band_h = int(CH * 0.22)
+        band = Image.new("RGB", (CW, band_h), (8, 8, 12))
+        draw = ImageDraw.Draw(band)
         
-        if "content" in data and len(data["content"]) > 0:
-            message_text = data["content"][0]["text"].strip()
-            sentences = message_text.split(".")
-            if len(sentences) > 2:
-                message_text = ".".join(sentences[:2]) + "."
-            return message_text
+        draw.rectangle([0, 0, CW, 5], fill=(212, 175, 55))
+        draw.rectangle([0, band_h - 5, CW, band_h], fill=(212, 175, 55))
         
+        font_profit = find_font(bold=True, size=int(band_h * 0.52))
+        font_label = find_font(bold=True, size=int(band_h * 0.22))
+        font_small = find_font(bold=True, size=int(band_h * 0.17))
+        
+        label = f"{pips} PIPS IN PROFIT 📈"
+        profit_str = f"+£{profit_gbp:,.2f}"
+        detail_str = f"0.11 Lots  |  +{pips} PIPS"
+        
+        bbox = draw.textbbox((0, 0), label, font=font_label)
+        tw = bbox[2] - bbox[0]
+        draw.text(((CW - tw) // 2, 8), label, font=font_label, fill=(255, 255, 255))
+        
+        bbox = draw.textbbox((0, 0), profit_str, font=font_profit)
+        tw = bbox[2] - bbox[0]
+        py = int(band_h * 0.28)
+        draw.text(((CW - tw) // 2 + 3, py + 3), profit_str, font=font_profit, fill=(0, 60, 0))
+        draw.text(((CW - tw) // 2, py), profit_str, font=font_profit, fill=(0, 230, 80))
+        
+        bbox = draw.textbbox((0, 0), detail_str, font=font_small)
+        tw = bbox[2] - bbox[0]
+        draw.text(((CW - tw) // 2, band_h - int(band_h * 0.22)), detail_str, font=font_small, fill=(212, 175, 55))
+        
+        combined = Image.new("RGB", (CW, CH + band_h))
+        combined.paste(chart_img, (0, 0))
+        combined.paste(band, (0, CH))
+        
+        buf = BytesIO()
+        combined.save(buf, format="JPEG", quality=92)
+        buf.seek(0)
+        return buf.read()
+    
     except Exception as e:
-        logger.error(f"Claude API error: {e}")
-    
-    return None
+        logger.error(f"Profit overlay error: {e}")
+        return chart_bytes
 
 
-def get_market_open_message():
-    """Check if 30 mins before market open"""
-    uk_time = get_uk_time()
-    hour = uk_time.hour
-    minute = uk_time.minute
-    
-    messages = []
-    
-    if hour == 14 and 0 <= minute < 30:
-        messages.append("🚨 USA market opening in 30 mins! Gold and BTC usually move hard when US opens. Get ready team 📊")
-    
-    if hour == 23 and 30 <= minute < 60:
-        messages.append("⏰ Asia market about to open in 30 mins. Usually volatile on that session. Watch Gold and BTC closely 🔥")
-    
-    if hour == 7 and 30 <= minute < 60:
-        messages.append("🇬🇧 London market opening in 30 mins! Early morning volatility incoming. Stay sharp team 💪")
-    
-    if hour == 8 and 30 <= minute < 60:
-        messages.append("🇪🇺 Europe market about to open in 30 mins. Watch for volatility spikes on BTC and Gold 📈")
-    
-    return messages[0] if messages else None
+# ═══════════════════════════════════════════════════════════
+# TELEGRAM MESSAGE SENDING
+# ═══════════════════════════════════════════════════════════
 
-
-def generate_fallback_response(prices):
-    """Generate fallback response with all message types"""
-    
-    gold_price = prices["gold"]
-    btc_price = int(prices["btc"])
-    
-    trade_setups = [
-        f"Gold looking solid on the daily, but 1hr is overbought. Might wait for pullback around ${gold_price - 5:.2f} 👀",
-        f"4hr support holding nicely here at ${gold_price:.2f}. Could bounce, worth watching if buyers step in 📈",
-        f"Not convinced yet. Daily is bullish but if Gold loses ${gold_price - 10:.2f}, that's a problem. Watching that 🔴",
-    ]
-    
-    timeframe_analysis = [
-        f"Daily support is strong but 1hr is getting stretched. Could see pullback here, not a bad spot to buy dip 🎯",
-        f"Weekly is bullish Gold trend, 4hr holding up, 1hr showing some weakness. Bigger picture still good 📈",
-    ]
-    
-    news_messages = [
-        f"Trump tweeted about the Fed again. Historically Gold pops on that. Could see spike today 📈",
-        f"Jobs report tomorrow. Weak = Gold probably goes up, strong = pressure. Already pricing in something 📊",
-    ]
-    
-    psychology_tips = [
-        f"Don't chase here. Let Gold come to you at support. Patience wins 🎯",
-        f"Most people panic sell at the worst times. That's when real money steps in. Stay calm 💯",
-    ]
-    
-    humor_messages = [
-        f"Gold did the classic fake-out lol. Got a lot of people. Classic 😅",
-        f"When you're right but still sweating anyway 😤",
-    ]
-    
-    community_questions = [
-        f"Gold at ${gold_price:.2f} - what's your read team? Bullish or waiting? 👀",
-        f"Anyone else seeing that support holding? Or am I missing something? 🤔",
-    ]
-    
-    live_analysis = [
-        f"Gold bouncing nicely from support. Buyers definitely stepping in 📈",
-        f"Not looking convinced yet. Need to hold this level to stay bullish 🤐",
-    ]
-    
-    motivation = [
-        f"Most people quit before the move happens. Not us 🚀",
-        f"Patience = profits. You're doing great if you're still here 💯",
-    ]
-    
-    all_messages = (
-        trade_setups + timeframe_analysis + news_messages + psychology_tips +
-        humor_messages + community_questions + live_analysis + motivation
-    )
-    
-    return random.choice(all_messages)
-
-
-async def maybe_reply_to_messages(prices):
-    """Randomly reply to messages"""
-    global client
-    
-    try:
-        if random.random() > 0.5:
-            return None
-        
-        messages = await get_last_messages_with_ids(limit=25)
-        
-        if not messages or len(messages) < 1:
-            return None
-        
-        target_message = random.choice(messages)
-        
-        if len(target_message["text"]) < 5:
-            return None
-        
-        logger.info(f"Replying to {target_message['sender']}: {target_message['text'][:50]}")
-        
-        reply = generate_reply_to_message(target_message["text"], target_message["sender"], prices)
-        
-        if not reply:
-            return None
-        
-        entity = await client.get_entity(VANTAGE_GROUP_ID)
-        
-        sent = await client.send_message(
-            entity,
-            reply,
-            reply_to=target_message["message_id"],
-            parse_mode="md"
-        )
-        
-        logger.info(f"✨ Replied to {target_message['sender']} successfully!")
-        return sent
-        
-    except Exception as e:
-        logger.error(f"Reply error: {e}")
-        return None
-
-
-async def send_whatsapp_promo():
-    """Send WhatsApp promo to user's channel every 3 hours"""
-    global client
-    
-    try:
-        if not client or not await client.is_user_authorized():
-            logger.error("Not logged in for promo")
-            return None
-        
-        entity = await client.get_entity(USER_CHANNEL_ID)
-        
-        message_text = (
-            "🚀 <b>Join Our WhatsApp Exclusive Community!</b> 🚀\n\n"
-            "600+ traders receiving DAILY SIGNALS + live analysis\n\n"
-            "<b>👇 JOIN HERE 👇</b>\n"
-            "https://chat.whatsapp.com/IkmwitDmS5D3vWo8fN6Mhj"
-        )
-        
-        sent = await client.send_message(entity, message_text, parse_mode='html')
-        
-        logger.info(f"📱 WhatsApp promo sent to YOUR CHANNEL!")
-        return sent
-        
-    except Exception as e:
-        logger.error(f"Promo send error: {e}")
-        return None
-
-
-async def send_to_vantage(message_text, reply_to=None):
+async def send_to_vantage(text, image_bytes=None):
     """Send message to Vantage group"""
     global client
-
-    if not ENABLE_GROUP_SEND:
-        logger.warning("Group sending is locked")
-        return None
-
-    if not VANTAGE_GROUP_ID:
-        logger.error("VANTAGE_GROUP_ID missing")
-        return None
-
+    
     try:
-        entity = await client.get_entity("vantageofficialcommunity")
+        if not client or not await client.is_user_authorized():
+            logger.error("Client not authorized")
+            return False
         
-        kwargs = {"parse_mode": "md"}
-        if reply_to:
-            kwargs["reply_to"] = reply_to
-
-        sent = await client.send_message(entity, message_text, **kwargs)
-        logger.info("Message sent")
-        return sent
-
+        entity = await client.get_entity(VANTAGE_GROUP_ID)
+        
+        if image_bytes:
+            await client.send_file(
+                entity,
+                image_bytes,
+                caption=text,
+                parse_mode='html',
+                reply_to=VANTAGE_TOPIC_ID
+            )
+        else:
+            await client.send_message(
+                entity,
+                text,
+                parse_mode='html',
+                reply_to=VANTAGE_TOPIC_ID
+            )
+        
+        logger.info(f"✅ Message sent to Vantage group")
+        return True
+    
     except Exception as e:
         logger.error(f"Send error: {e}")
-        return None
+        return False
 
 
-async def engagement_loop():
-    """Main engagement loop"""
-    global engagement_running, last_posted_time, last_promo_time
+def check_cooldown(trade_id, level):
+    """Check if cooldown period has passed"""
+    key = f"{trade_id}_{level}"
+    now = time.time()
     
-    logger.info("🚀 Engagement loop started - REAL LIVE PRICES MODE + SMART REPLIES + WHATSAPP PROMO")
-    last_posted_time = time.time()
-    last_promo_time = time.time()
+    if key in last_message_time:
+        elapsed = now - last_message_time[key]
+        if elapsed < message_cooldown_seconds:
+            return False
     
-    while engagement_running:
+    last_message_time[key] = now
+    return True
+
+
+# ═══════════════════════════════════════════════════════════
+# WEBHOOK ENDPOINTS
+# ═══════════════════════════════════════════════════════════
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    """Receive entry signals from TradingView"""
+    try:
+        data = request.get_json(force=True)
+        event = data.get("event")
+        pair = data.get("pair", "XAUUSD")
+        direction = data.get("direction", "BUY").upper()
+        price = float(str(data.get("price", "0")).replace(",", ""))
+        
+        logger.info(f"Webhook: {event} | {pair} | {direction} | {price}")
+        
+        if event == "entry":
+            trade_id = f"{pair}_{int(time.time())}"
+            
+            with trade_lock:
+                active_trades[trade_id] = {
+                    "pair": pair,
+                    "direction": direction,
+                    "entry_price": price,
+                    "timestamp": time.time(),
+                    "status": "open"
+                }
+                reported_levels[trade_id] = set()
+            
+            logger.info(f"Trade opened: {trade_id}")
+            return jsonify({"status": "ok"})
+        
+        return jsonify({"status": "ok"})
+    
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        return jsonify({"status": "error"}), 500
+
+
+@app.route("/mt5_close", methods=["POST"])
+def mt5_close():
+    """Receive close signals from MT5"""
+    try:
+        data = request.get_json(force=True)
+        pair = data.get("pair", "XAUUSD")
+        close_type = data.get("close_type", "")
+        price = float(data.get("price", 0))
+        profit = float(data.get("profit", 0))
+        
+        logger.info(f"MT5 close: {pair} {close_type} price={price} profit={profit}")
+        
+        if close_type == "TP1":
+            text = (
+                "<b>TP1 SMASHED ✅✅✅</b>\n\n"
+                "☑️ Close your positions now and secure your profits\n\n"
+                "Or\n\n"
+                "☑️ Move your SL to Break Even and let the trade run risk free"
+            )
+            
+            # Send message
+            future = asyncio.run_coroutine_threadsafe(send_to_vantage(text), loop)
+            future.result(timeout=15)
+        
+        elif close_type == "TP2":
+            text = (
+                "<b>TP2 SMASHED ✅✅✅✅</b>\n\n"
+                "☑️ Close remaining positions and secure your profits\n\n"
+                "Or\n\n"
+                "☑️ Let the remaining trade run risk free to TP3"
+            )
+            future = asyncio.run_coroutine_threadsafe(send_to_vantage(text), loop)
+            future.result(timeout=15)
+        
+        elif close_type == "TP3":
+            text = (
+                "<b>TP3 SMASHED ✅✅✅✅✅</b>\n\n"
+                "☑️ ALL TARGETS HIT!\n\n"
+                "💰 Full profits secured.\n\n"
+                "👏 Well done team!"
+            )
+            future = asyncio.run_coroutine_threadsafe(send_to_vantage(text), loop)
+            future.result(timeout=15)
+        
+        elif close_type == "SL":
+            text = "❌ SL Triggered Team ❌\nLooking for the next Set-Up. Lets win on the Next one!"
+            future = asyncio.run_coroutine_threadsafe(send_to_vantage(text), loop)
+            future.result(timeout=15)
+        
+        return jsonify({"status": "ok"})
+    
+    except Exception as e:
+        logger.error(f"mt5_close error: {e}")
+        return jsonify({"status": "error"}), 500
+
+
+# ═══════════════════════════════════════════════════════════
+# PROFIT MONITORING (Background Thread)
+# ═══════════════════════════════════════════════════════════
+
+def monitor_profits():
+    """Monitor open trades and send profit level messages"""
+    logger.info("Profit monitor started")
+    
+    while True:
         try:
-            delay = get_next_post_delay()
-            next_post_minutes = delay / 60
+            with trade_lock:
+                trades_copy = dict(active_trades)
             
-            uk_time = get_uk_time()
-            logger.info(f"[{uk_time.strftime('%H:%M UTC')}] Next post in {next_post_minutes:.1f} mins")
-            
-            await asyncio.sleep(delay)
-            
-            if not engagement_running:
-                break
-            
-            prices = get_live_prices()
-            
-            if prices["btc"] is None or prices["gold"] is None:
-                logger.warning("❌ Missing real prices - skipping this post cycle")
-                continue
-            
-            logger.info(f"📊 REAL Prices: BTC ${prices['btc']:,.0f}, Gold ${prices['gold']:.2f}")
-            
-            messages = await get_last_messages(5)
-            
-            if messages and len(messages) > 0:
-                response = await asyncio.get_event_loop().run_in_executor(
-                    None, 
-                    lambda: generate_contextual_response(messages, prices)
-                )
-                if not response:
-                    response = generate_fallback_response(prices)
-            else:
-                response = generate_fallback_response(prices)
-            
-            sent = await send_to_vantage(response, reply_to=VANTAGE_TOPIC_ID)
-            
-            if sent:
-                logger.info(f"✨ Posted main message successfully!")
-            
-            reply_sent = await maybe_reply_to_messages(prices)
-            if reply_sent:
-                logger.info(f"💬 Smart reply sent!")
-            
-            current_time = time.time()
-            if current_time - last_promo_time >= 10800:
-                promo_sent = await send_whatsapp_promo()
-                if promo_sent:
-                    logger.info(f"📱 WhatsApp promo sent!")
-                    last_promo_time = current_time
-            
+            for trade_id, trade in trades_copy.items():
+                if trade["status"] != "open":
+                    continue
+                
+                pair = trade["pair"]
+                direction = trade["direction"]
+                entry_price = trade["entry_price"]
+                
+                # Get current price
+                if pair == "XAUUSD":
+                    current_price = get_gold_price()
+                else:
+                    current_price = get_btc_price()
+                
+                if not current_price:
+                    continue
+                
+                # Calculate pips
+                if pair == "XAUUSD":
+                    if direction == "BUY":
+                        pips = round((current_price - entry_price) * 100)
+                    else:
+                        pips = round((entry_price - current_price) * 100)
+                else:
+                    if direction == "BUY":
+                        pips = int(current_price - entry_price)
+                    else:
+                        pips = int(entry_price - current_price)
+                
+                # Check profit levels
+                for level_pips in sorted(PROFIT_LEVELS.keys()):
+                    if pips >= level_pips and level_pips not in reported_levels.get(trade_id, set()):
+                        # Check cooldown
+                        if not check_cooldown(trade_id, level_pips):
+                            continue
+                        
+                        # Get profit amount
+                        £_range = PROFIT_LEVELS[level_pips]["£_range"]
+                        profit_gbp = round(random.uniform(£_range[0], £_range[1]), 2)
+                        
+                        # Generate message
+                        label = PROFIT_LEVELS[level_pips].get("label", f"{level_pips} PIPS IN PROFIT 📈")
+                        explanation = random.choice(EXPLANATIONS["BUY_ENTRY" if direction == "BUY" else "SELL_ENTRY"])
+                        
+                        text = (
+                            f"<b>{label}</b>\n\n"
+                            f"+£{profit_gbp:,.2f}\n\n"
+                            f"0.11 Lots | +{level_pips} PIPS\n\n"
+                            f"💡 {explanation}"
+                        )
+                        
+                        # Get chart
+                        chart = get_chart_image(pair)
+                        image_bytes = None
+                        if chart:
+                            image_bytes = generate_profit_overlay(pair, level_pips, profit_gbp, chart)
+                        
+                        # Send
+                        future = asyncio.run_coroutine_threadsafe(
+                            send_to_vantage(text, image_bytes),
+                            loop
+                        )
+                        try:
+                            future.result(timeout=15)
+                            
+                            with trade_lock:
+                                if trade_id in reported_levels:
+                                    reported_levels[trade_id].add(level_pips)
+                        except:
+                            pass
+        
         except Exception as e:
-            logger.error(f"Loop error: {e}")
-            await asyncio.sleep(60)
-    
-    logger.info("Engagement loop stopped")
+            logger.error(f"Monitor error: {e}")
+        
+        time.sleep(10)
 
+
+threading.Thread(target=monitor_profits, daemon=True).start()
+
+
+# ═══════════════════════════════════════════════════════════
+# PRICE FETCHING
+# ═══════════════════════════════════════════════════════════
+
+def get_gold_price():
+    try:
+        if TWELVE_DATA_KEY:
+            r = requests.get(f"https://api.twelvedata.com/price?symbol=XAU/USD&apikey={TWELVE_DATA_KEY}", timeout=5)
+            if r.status_code == 200:
+                p = float(r.json().get("price", 0))
+                if p > 3000:
+                    return p
+    except:
+        pass
+    
+    try:
+        r = requests.get("https://api.metals.live/v1/spot/gold", timeout=6)
+        if r.status_code == 200:
+            data = r.json()
+            if isinstance(data, list) and data:
+                p = float(data[0].get("gold", 0))
+                if p > 3000:
+                    return p
+    except:
+        pass
+    
+    return None
+
+
+def get_btc_price():
+    try:
+        r = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT", timeout=5)
+        if r.status_code == 200:
+            p = float(r.json()["price"])
+            if p > 0:
+                return p
+    except:
+        pass
+    
+    return None
+
+
+# ═══════════════════════════════════════════════════════════
+# HEALTH CHECK
+# ═══════════════════════════════════════════════════════════
 
 @app.route("/", methods=["GET"])
 def health():
-    """Health check"""
-    uk_time = get_uk_time()
-    prices = get_live_prices()
+    with trade_lock:
+        active_count = len([t for t in active_trades.values() if t["status"] == "open"])
     
-    return jsonify({
-        "status": "AI Trader Engagement Bot Running",
-        "mode": "REAL LIVE PRICES",
-        "logged_in": SESSION_STRING != "",
-        "engagement_running": engagement_running,
-        "group_send_enabled": ENABLE_GROUP_SEND,
-        "vantage_group_id": VANTAGE_GROUP_ID,
-        "uk_time": uk_time.strftime("%Y-%m-%d %H:%M:%S %Z"),
-        "live_prices": {
-            "gold": f"${prices['gold']}",
-            "btc": f"${prices['btc']:,.0f}"
-        }
-    })
+    return (
+        f"✅ Trade Alert Bot Running!\n"
+        f"Vantage Group: {VANTAGE_GROUP_ID}\n"
+        f"Active Trades: {active_count}\n"
+        f"Client: {'Connected' if client else 'Disconnected'}\n"
+    )
 
 
-@app.route("/start_engagement", methods=["GET"])
-def start_engagement():
-    """Start the engagement loop"""
-    global engagement_running
+@app.route("/reset", methods=["GET"])
+def reset():
+    with trade_lock:
+        active_trades.clear()
+        reported_levels.clear()
     
-    if engagement_running:
-        return jsonify({"status": "Already running"})
-    
-    if not ENABLE_GROUP_SEND:
-        return jsonify({"status": "blocked", "reason": "ENABLE_GROUP_SEND is false"}), 403
-    
-    engagement_running = True
-    asyncio.run_coroutine_threadsafe(engagement_loop(), loop)
-    
-    return jsonify({"status": "Engagement started", "mode": "REAL LIVE PRICES"})
-
-
-@app.route("/stop_engagement", methods=["GET"])
-def stop_engagement():
-    """Stop the engagement loop"""
-    global engagement_running
-    
-    engagement_running = False
-    return jsonify({"status": "Engagement stopped"})
-
-
-@app.route("/test_promo_now", methods=["GET"])
-def test_promo_now():
-    """Manually trigger WhatsApp promo to your channel"""
-    
-    async def _test():
-        promo_sent = await send_whatsapp_promo()
-        
-        return {
-            "status": "success" if promo_sent else "failed",
-            "message": "🚀 Join Our WhatsApp Exclusive Community! 🚀\n600+ traders receiving DAILY SIGNALS + live analysis",
-            "button": "✅ JOIN WHATSAPP GROUP ✅",
-            "channel": "@gold_btc_signalss",
-            "whatsapp_link": "https://chat.whatsapp.com/IkmwitDmS5D3vWo8fN6Mhj"
-        }
-    
-    try:
-        future = asyncio.run_coroutine_threadsafe(_test(), loop)
-        result = future.result(timeout=30)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/test_post_now", methods=["GET"])
-def test_post_now():
-    """Manually trigger a post"""
-    
-    async def _test():
-        prices = get_live_prices()
-        response = generate_fallback_response(prices)
-        
-        sent = await send_to_vantage(response, reply_to=VANTAGE_TOPIC_ID)
-        
-        return {
-            "status": "success" if sent else "failed",
-            "message_sent": response,
-            "real_live_prices": {
-                "gold": f"${prices['gold']:.2f}",
-                "btc": f"${prices['btc']:,.0f}"
-            }
-        }
-    
-    try:
-        future = asyncio.run_coroutine_threadsafe(_test(), loop)
-        result = future.result(timeout=30)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/send_code", methods=["GET"])
-def send_code():
-    """Send login code to phone"""
-    
-    async def _send():
-        global client
-        try:
-            if not client:
-                client = TelegramClient(StringSession(), API_ID, API_HASH)
-            
-            await client.connect()
-            
-            result = await client.send_code_request(PHONE)
-            
-            return {
-                "status": "success",
-                "message": f"Code sent to {PHONE}",
-                "phone_code_hash": result.phone_code_hash
-            }
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
-    
-    try:
-        future = asyncio.run_coroutine_threadsafe(_send(), loop)
-        result = future.result(timeout=30)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/verify", methods=["GET"])
-def verify():
-    """Verify code and get SESSION_STRING"""
-    
-    code = request.args.get("code")
-    
-    if not code:
-        return jsonify({"error": "code parameter required"}), 400
-    
-    async def _verify():
-        global client
-        try:
-            if not client:
-                return {"status": "error", "message": "Client not initialized"}
-            
-            await client.sign_in(PHONE, code)
-            
-            session_string = client.session.save()
-            
-            return {
-                "status": "success",
-                "message": "Login successful!",
-                "session_string": session_string,
-                "instructions": "Copy the session_string above and update Railway variables with this value"
-            }
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
-    
-    try:
-        future = asyncio.run_coroutine_threadsafe(_verify(), loop)
-        result = future.result(timeout=30)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return "All trades cleared! ✅"
 
 
 if __name__ == "__main__":
