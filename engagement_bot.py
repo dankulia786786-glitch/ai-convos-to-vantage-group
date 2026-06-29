@@ -397,7 +397,7 @@ def send_code():
     global temp_client, phone_number
     
     try:
-        phone = os.environ.get("PHONE", "+447418355138")
+        phone = VANTAGE_PHONE  # Use the phone from Railway variables
         phone_number = phone
         
         temp_client = TelegramClient(StringSession(), API_ID, API_HASH)
