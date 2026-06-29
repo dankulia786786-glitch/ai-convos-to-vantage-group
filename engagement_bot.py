@@ -388,15 +388,32 @@ threading.Thread(target=monitor_profits, daemon=True).start()
 # TELEGRAM AUTHENTICATION (Generate Session String)
 # ═══════════════════════════════════════════════════════════
 
+import concurrent.futures
+
 temp_clients = {}
 
-def run_async(coro):
-    """Run async code in the main event loop"""
-    try:
-        future = asyncio.run_coroutine_threadsafe(coro, loop)
-        return future.result(timeout=15)
-    except Exception as e:
-        raise e
+def _run_in_new_loop(coro_func):
+    """Run an async function in a brand-new event loop inside its own thread."""
+    result_holder = {}
+
+    def worker():
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        try:
+            result_holder['value'] = new_loop.run_until_complete(coro_func())
+        except Exception as e:
+            result_holder['error'] = e
+        finally:
+            new_loop.close()
+
+    t = threading.Thread(target=worker)
+    t.start()
+    t.join(timeout=30)
+
+    if 'error' in result_holder:
+        raise result_holder['error']
+    return result_holder.get('value')
+
 
 @app.route("/send_code", methods=["GET"])
 def send_code():
@@ -405,23 +422,25 @@ def send_code():
         phone = VANTAGE_PHONE
         if not phone:
             return jsonify({"status": "error", "message": "VANTAGE_PHONE not set in Railway"}), 400
-        
-        temp_client = TelegramClient(StringSession(), API_ID, API_HASH)
-        temp_clients['current'] = temp_client
-        
+
         async def send():
-            await temp_client.connect()
-            await temp_client.send_code_request(phone)
+            tc = TelegramClient(StringSession(), API_ID, API_HASH)
+            await tc.connect()
+            sent = await tc.send_code_request(phone)
+            # Save the session + phone_code_hash so verify can reuse them
+            temp_clients['session'] = tc.session.save()
+            temp_clients['phone_code_hash'] = sent.phone_code_hash
+            await tc.disconnect()
             return phone
-        
-        result_phone = run_async(send())
-        
+
+        result_phone = _run_in_new_loop(send)
+
         return jsonify({
             "status": "success",
             "message": f"✅ Code sent to {result_phone}",
-            "next_step": f"Visit: /verify?code=YOUR_CODE"
+            "next_step": "Visit: /verify?code=YOUR_CODE"
         }), 200
-        
+
     except Exception as e:
         logger.error(f"Send code error: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -432,29 +451,33 @@ def verify():
     """Verify code and return session string"""
     try:
         code = request.args.get("code", "")
-        
+
         if not code:
             return jsonify({"status": "error", "message": "No code provided"}), 400
-        
-        if 'current' not in temp_clients:
+
+        if 'session' not in temp_clients:
             return jsonify({"status": "error", "message": "Call /send_code first"}), 400
-        
-        temp_client = temp_clients['current']
-        
+
         async def verify_code():
-            await temp_client.sign_in(VANTAGE_PHONE, code)
-            session = temp_client.session.save()
-            await temp_client.disconnect()
+            tc = TelegramClient(StringSession(temp_clients['session']), API_ID, API_HASH)
+            await tc.connect()
+            await tc.sign_in(
+                VANTAGE_PHONE,
+                code,
+                phone_code_hash=temp_clients.get('phone_code_hash')
+            )
+            session = tc.session.save()
+            await tc.disconnect()
             return session
-        
-        session_string = run_async(verify_code())
-        
+
+        session_string = _run_in_new_loop(verify_code)
+
         return jsonify({
             "status": "success",
             "session_string": session_string,
             "message": "✅ Copy session_string and update VANTAGE_SESSION_STRING in Railway"
         }), 200
-        
+
     except Exception as e:
         logger.error(f"Verify error: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
