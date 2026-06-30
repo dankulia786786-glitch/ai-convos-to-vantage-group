@@ -240,6 +240,60 @@ threading.Thread(
 ).start()
 
 
+# ── CHANNEL POLLER (reliable: actively checks for new posts) ──
+last_seen_msg_id = {"id": 0}
+
+
+def channel_poller():
+    logger.info("Channel poller started (8s)")
+    # prime: record the newest existing message id so we don't reprocess history
+    def prime():
+        async def _p():
+            try:
+                ent = await client.get_entity(SOURCE_CHANNEL_ID)
+                async for msg in client.iter_messages(ent, limit=1):
+                    last_seen_msg_id["id"] = msg.id
+                    logger.info(f"Poller primed at msg id {msg.id}")
+            except Exception as e:
+                logger.error(f"Prime error: {e}")
+        try:
+            asyncio.run_coroutine_threadsafe(_p(), loop).result(timeout=20)
+        except Exception as e:
+            logger.error(f"Prime failed: {e}")
+
+    # wait for client to be ready, then prime once
+    for _ in range(30):
+        if client:
+            break
+        time.sleep(1)
+    time.sleep(3)
+    prime()
+
+    while True:
+        try:
+            async def _check():
+                new = []
+                ent = await client.get_entity(SOURCE_CHANNEL_ID)
+                async for msg in client.iter_messages(ent, limit=10):
+                    if msg.id > last_seen_msg_id["id"]:
+                        new.append(msg)
+                # oldest first
+                for msg in reversed(new):
+                    last_seen_msg_id["id"] = max(last_seen_msg_id["id"], msg.id)
+                    await handle_source_message(msg.message or "")
+                return len(new)
+            fut = asyncio.run_coroutine_threadsafe(_check(), loop)
+            n = fut.result(timeout=20)
+            if n:
+                logger.info(f"Poller processed {n} new message(s)")
+        except Exception as e:
+            logger.error(f"Poller error: {e}")
+        time.sleep(8)
+
+
+threading.Thread(target=channel_poller, daemon=True).start()
+
+
 # ── PARSE SOURCE SIGNAL ──────────────────────────────
 def parse_signal(text):
     if not text:
