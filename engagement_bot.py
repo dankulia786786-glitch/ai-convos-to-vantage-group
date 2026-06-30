@@ -40,6 +40,7 @@ loop = asyncio.new_event_loop()
 active_trades = {}
 trade_lock = threading.Lock()
 reported_levels = {}
+last_channel_msgs = []  # debug: last messages seen from source channel
 
 
 def run_loop():
@@ -406,6 +407,13 @@ def build_entry_post(sig):
 
 # ── HANDLE SOURCE MESSAGE ────────────────────────────
 async def handle_source_message(text):
+    # record for debugging
+    try:
+        last_channel_msgs.append({"ts": time.time(), "text": (text or "")[:500]})
+        if len(last_channel_msgs) > 10:
+            del last_channel_msgs[0]
+    except Exception:
+        pass
     u = text.upper()
     if any(m in u for m in PROMO_MARKERS) and "ENTRY" not in u:
         logger.info("Skipped promo/non-trade message")
@@ -661,6 +669,44 @@ def price():
     lines.append(f"OANDA: {oanda if oanda is not None else 'none'}")
     lines.append(f"Bot will use: {'MT5' if fresh else 'OANDA'}")
     return "\n".join(lines), 200
+
+
+@app.route("/debug_channel", methods=["GET"])
+def debug_channel():
+    """Show the last messages the bot RECEIVED from the source channel via the live listener."""
+    if not last_channel_msgs:
+        return ("No channel messages received yet by the live listener.\n"
+                "If Kevin has posted since the bot started, the listener isn't catching them.\n"
+                "Try /pull_channel to actively read the channel."), 200
+    lines = []
+    for m in last_channel_msgs[-10:]:
+        lines.append(f"[{int(time.time()-m['ts'])}s ago] {m['text'][:160]}")
+    return "LAST RECEIVED:\n" + "\n\n".join(lines), 200
+
+
+@app.route("/pull_channel", methods=["GET"])
+def pull_channel():
+    """Actively fetch the last few messages from the source channel (proves read access)."""
+    async def pull():
+        out = []
+        try:
+            ent = await client.get_entity(SOURCE_CHANNEL_ID)
+            async for msg in client.iter_messages(ent, limit=5):
+                out.append((msg.message or "")[:160])
+        except Exception as e:
+            return f"ERROR reading channel: {e}"
+        return out
+
+    try:
+        fut = asyncio.run_coroutine_threadsafe(pull(), loop)
+        res = fut.result(timeout=20)
+        if isinstance(res, str):
+            return res, 200
+        if not res:
+            return "Read the channel OK but it returned no messages.", 200
+        return "LATEST IN CHANNEL:\n" + "\n\n".join(f"- {t}" for t in res), 200
+    except Exception as e:
+        return f"Failed: {e}", 500
 
 
 @app.route("/test/<level>", methods=["GET"])
