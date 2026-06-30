@@ -98,24 +98,75 @@ PROMO_MARKERS = ["JOIN", "FREE", "WHATSAPP", "WHATS APP", " DM ", "SUPPORT",
                  "T.ME/", "HTTP", "SUBSCRIBE", "PM NOW"]
 
 
-# ── AI FRESH MESSAGE GENERATOR (hype voice, unique each time) ──
+# ── AI FRESH MESSAGE GENERATOR (fixed heading + fresh line beneath) ──
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
+# Fixed top headings — these NEVER change
+FIXED_HEADING = {
+    20: "\u2705\u2705\u2705 <b>20 PIPS IN PROFIT</b>",
+    40: "\u2705\u2705\u2705 <b>40 PIPS IN PROFIT</b>",
+    80: "\u2705\u2705\u2705 <b>80 PIPS IN PROFIT</b>",
+    100: "\u2705\u2705\u2705 <b>TP1 SMASHED 100+ PIPS</b>",
+    150: "\u2705\u2705\u2705 <b>150 PIPS IN PROFIT</b>",
+    200: "\u2705\u2705\u2705 <b>TP2 SMASHED 200 PIPS</b>",
+    "SL": "\u274c <b>STOP LOSS HIT</b>",
+    "BE": "\u26a0\ufe0f <b>BREAKEVEN HIT</b>",
+}
+
 LEVEL_BRIEF = {
-    20: "the trade is +20 pips in profit. Tell people they can secure it or move stop loss to entry to go risk-free.",
-    40: "the trade is +40 pips in profit. Tell people to lock in profit or trail their stop loss.",
-    80: "the trade is +80 pips in profit, a big move. Tell people to secure profits or trail the stop loss.",
-    100: "TP1 is smashed, +100 pips. Celebrate it, tell people to secure or move stop to profit and let it run to TP2.",
-    150: "the trade is +150 pips and running, a monster move. Tell people to bank some or trail the stop loss.",
-    200: "TP2 is smashed, +200 pips, huge win. Celebrate and tell people to secure the profit.",
-    "SL": "the stop loss was hit. Stay positive and confident, say you'll catch the next setup. First person 'I', never 'we' or 'team'.",
-    "BE": "price came back to breakeven after being in profit. Congratulate anyone who secured profit earlier, say you're looking for new entries. First person 'I'.",
+    20: "the trade is 20 pips in profit. Say they can secure it now or move stop loss to entry to go risk-free.",
+    40: "the trade is 40 pips in profit. Say to lock in profit or trail the stop loss.",
+    80: "the trade is 80 pips in profit, a big move. Say to secure profits or trail the stop loss.",
+    100: "TP1 just hit, 100 pips. Say to secure or move stop into profit and let it run to TP2.",
+    150: "the trade is 150 pips and running. Say to bank some or trail the stop loss.",
+    200: "TP2 just hit, 200 pips, huge win. Say to secure the profit.",
+    "SL": "the stop loss was hit. Stay positive and confident, say you'll catch the next setup.",
+    "BE": "price came back to breakeven after being in profit. Congratulate anyone who secured profit earlier and say you're looking for new entries.",
+}
+
+# Fallback bottom lines (no dashes) if the API fails
+FALLBACK_LINE = {
+    20: ["Secure it now or move your SL to entry and ride it risk free \U0001f4b0",
+         "Lock some in or shift your SL to entry, your call \U0001f680",
+         "Bank a bit here or go risk free by moving SL to entry \U0001f4c8"],
+    40: ["Protect it now or trail your SL up, looking strong \U0001f525",
+         "Secure some profit or let it run, SL to entry \U0001f4aa",
+         "Lock it in or trail the stop, momentum is with us \U0001f4c8"],
+    80: ["Massive move, secure profits or trail that SL up \U0001f525",
+         "Bank some here or ride it with SL trailing \U0001f680",
+         "Big one, lock profit in or let it keep flying \U0001f4b0"],
+    100: ["TP1 done! Secure it or move SL to profit and chase TP2 \U0001f3af",
+          "Smashed TP1! Lock in or let it run to the next target \U0001f525",
+          "TP1 in the bag! Protect it or ride toward TP2 \U0001f4b0"],
+    150: ["150 up and flying! Bank some or trail the stop \U0001f525",
+          "Monster run! Secure profit or let it keep going \U0001f680",
+          "Still climbing! Lock some in or trail your SL up \U0001f4c8"],
+    200: ["TP2 smashed! Huge result, banking this one \U0001f4b0",
+          "200 pips done! Locking in a beauty \U0001f525",
+          "TP2 hit! Securing this massive win \U0001f3af"],
+    "SL": ["Stopped out this time, no stress, I'll catch the next one \U0001f4aa",
+           "That one didn't go my way, already hunting the next setup \U0001f3af",
+           "Took the loss, I'll be right back with the next entry \U0001f680"],
+    "BE": ["Back to breakeven. If you secured profit earlier, well done! I'm looking for new entries \U0001f4b0",
+           "Breakeven now. Hope you banked some on the way up! Hunting the next setup \U0001f680",
+           "Came back to entry. Congrats if you locked profit in! On to the next one \U0001f525"],
 }
 
 
+def _clean_line(text):
+    # strip any em/en dashes and stray heading the model may add
+    text = text.replace("\u2014", ",").replace("\u2013", ",").replace(" - ", ", ")
+    # remove a leading bold heading if the model added one
+    text = re.sub(r"^\s*<b>.*?</b>\s*", "", text).strip()
+    # keep it to the first 1-2 sentences
+    return text.strip()
+
+
 def ai_message(level):
-    """Generate a fresh hype-style alert in the trader's voice. Falls back to templates."""
+    """Fixed heading on top + a fresh, dash-free line beneath (AI, with fallback)."""
+    heading = FIXED_HEADING.get(level, "")
     brief = LEVEL_BRIEF.get(level, "")
+    line = None
     if ANTHROPIC_API_KEY and brief:
         try:
             r = requests.post(
@@ -125,15 +176,15 @@ def ai_message(level):
                          "content-type": "application/json"},
                 json={
                     "model": "claude-sonnet-4-6",
-                    "max_tokens": 120,
+                    "max_tokens": 80,
                     "messages": [{
                         "role": "user",
                         "content": (
-                            "You are a hype, punchy forex/gold trader posting a quick alert to your followers. "
-                            "Write ONE short message (max 2 lines), high energy, with 1-3 emojis, sounding like a real person. "
-                            "Use first person 'I', NEVER 'we', 'team', 'us' or 'group'. Vary the wording so it never repeats. "
-                            "Put a short bold HTML heading on the first line using <b>...</b>, then the message on the next line. "
-                            "No preamble, output only the message. Context: " + brief
+                            "You're a hype, punchy gold/forex trader. Write ONE short line (max ~18 words) to your followers. "
+                            "High energy, 1-2 emojis, first person 'I' only, NEVER 'we'/'team'/'us'/'group'. "
+                            "ABSOLUTELY NO dashes of any kind (no - no \u2013 no \u2014); use commas or full stops instead. "
+                            "Do NOT include any heading or ticks, just the single line. Vary it so it never repeats. "
+                            "Context: " + brief
                         ),
                     }],
                 },
@@ -141,15 +192,18 @@ def ai_message(level):
             )
             if r.status_code == 200:
                 parts = [b.get("text", "") for b in r.json().get("content", []) if b.get("type") == "text"]
-                out = " ".join(parts).strip()
+                out = _clean_line(" ".join(parts))
                 if out:
-                    return out
+                    line = out
             else:
                 logger.warning(f"Anthropic msg {r.status_code}: {r.text[:150]}")
         except Exception as e:
             logger.warning(f"Anthropic msg failed: {e}")
-    # Fallback to a preset so the bot never goes silent
-    return random.choice(MESSAGE_TEMPLATES[level])
+
+    if not line:
+        line = random.choice(FALLBACK_LINE.get(level, ["Trade update \U0001f4c8"]))
+
+    return f"{heading}\n\n{line}"
 
 
 # ── CLIENT + CHANNEL LISTENER ────────────────────────
@@ -272,6 +326,7 @@ def reword_reasoning(reasoning, direction):
                 data = r.json()
                 parts = [b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"]
                 out = " ".join(parts).strip()
+                out = out.replace("\u2014", ",").replace("\u2013", ",").replace(" - ", ", ")
                 if out:
                     return out
             else:
