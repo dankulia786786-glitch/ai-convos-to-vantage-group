@@ -78,18 +78,78 @@ MESSAGE_TEMPLATES = {
         "<b>\u2705\u2705\u2705 150 PIPS AND CLIMBING</b>\n\nProtect this run \u2014 close part or trail SL up to lock it in!",
     ],
     200: [
-        "<b>\u2705\u2705\u2705 TP2 SMASHED 200 PIPS</b>\n\nHuge result \u2014 secure your profits, brilliant trade team!",
-        "<b>\u2705\u2705\u2705 TP2 HIT 200 PIPS IN PROFIT</b>\n\nBank it now \u2014 lock in this big win!",
-        "<b>\u2705\u2705\u2705 TP2 DONE 200 PIPS SECURED</b>\n\nClose it out and enjoy the profits!",
+        "<b>\u2705\u2705\u2705 TP2 SMASHED 200 PIPS</b>\n\nHuge result \u2014 I'm securing profit here. What a run!",
+        "<b>\u2705\u2705\u2705 TP2 HIT 200 PIPS IN PROFIT</b>\n\nBanking it now \u2014 locked in a big win!",
+        "<b>\u2705\u2705\u2705 TP2 DONE 200 PIPS SECURED</b>\n\nClosing it out and enjoying the profit!",
     ],
     "SL": [
-        "\u274c <b>SL TRIGGERED</b>\n\nStopped out this time \u2014 looking for the next entry. We win on the next one! \ud83d\udcaa",
-        "\u274c <b>STOP LOSS HIT</b>\n\nNo worries team, on to the next setup! \ud83c\udfaf",
+        "\u274c <b>STOP LOSS HIT</b>\n\nStopped out this time \u2014 no worries, I'll catch the next one. \ud83d\udcaa",
+        "\u274c <b>STOP LOSS HIT</b>\n\nThat one didn't work \u2014 I'm already hunting the next setup. \ud83c\udfaf",
+        "\u274c <b>STOP LOSS HIT</b>\n\nNo worries, I'll try again on the next entry. \ud83d\ude80",
+    ],
+    "BE": [
+        "\u26a0\ufe0f <b>BREAKEVEN HIT</b>\n\nFor those who secured profit earlier \u2014 congratulations! I'm now looking for new entries.",
+        "\u26a0\ufe0f <b>BACK TO BREAKEVEN</b>\n\nIf you locked in profit, well done! I'm watching for the next setup now.",
+        "\u26a0\ufe0f <b>BREAKEVEN</b>\n\nHope you banked some on the way up \u2014 nicely done. I'll be looking for the next entry.",
     ],
 }
 
 PROMO_MARKERS = ["JOIN", "FREE", "WHATSAPP", "WHATS APP", " DM ", "SUPPORT",
                  "T.ME/", "HTTP", "SUBSCRIBE", "PM NOW"]
+
+
+# ── AI FRESH MESSAGE GENERATOR (hype voice, unique each time) ──
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+
+LEVEL_BRIEF = {
+    20: "the trade is +20 pips in profit. Tell people they can secure it or move stop loss to entry to go risk-free.",
+    40: "the trade is +40 pips in profit. Tell people to lock in profit or trail their stop loss.",
+    80: "the trade is +80 pips in profit, a big move. Tell people to secure profits or trail the stop loss.",
+    100: "TP1 is smashed, +100 pips. Celebrate it, tell people to secure or move stop to profit and let it run to TP2.",
+    150: "the trade is +150 pips and running, a monster move. Tell people to bank some or trail the stop loss.",
+    200: "TP2 is smashed, +200 pips, huge win. Celebrate and tell people to secure the profit.",
+    "SL": "the stop loss was hit. Stay positive and confident, say you'll catch the next setup. First person 'I', never 'we' or 'team'.",
+    "BE": "price came back to breakeven after being in profit. Congratulate anyone who secured profit earlier, say you're looking for new entries. First person 'I'.",
+}
+
+
+def ai_message(level):
+    """Generate a fresh hype-style alert in the trader's voice. Falls back to templates."""
+    brief = LEVEL_BRIEF.get(level, "")
+    if ANTHROPIC_API_KEY and brief:
+        try:
+            r = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": ANTHROPIC_API_KEY,
+                         "anthropic-version": "2023-06-01",
+                         "content-type": "application/json"},
+                json={
+                    "model": "claude-sonnet-4-6",
+                    "max_tokens": 120,
+                    "messages": [{
+                        "role": "user",
+                        "content": (
+                            "You are a hype, punchy forex/gold trader posting a quick alert to your followers. "
+                            "Write ONE short message (max 2 lines), high energy, with 1-3 emojis, sounding like a real person. "
+                            "Use first person 'I', NEVER 'we', 'team', 'us' or 'group'. Vary the wording so it never repeats. "
+                            "Put a short bold HTML heading on the first line using <b>...</b>, then the message on the next line. "
+                            "No preamble, output only the message. Context: " + brief
+                        ),
+                    }],
+                },
+                timeout=12,
+            )
+            if r.status_code == 200:
+                parts = [b.get("text", "") for b in r.json().get("content", []) if b.get("type") == "text"]
+                out = " ".join(parts).strip()
+                if out:
+                    return out
+            else:
+                logger.warning(f"Anthropic msg {r.status_code}: {r.text[:150]}")
+        except Exception as e:
+            logger.warning(f"Anthropic msg failed: {e}")
+    # Fallback to a preset so the bot never goes silent
+    return random.choice(MESSAGE_TEMPLATES[level])
 
 
 # ── CLIENT + CHANNEL LISTENER ────────────────────────
@@ -177,9 +237,49 @@ def is_sl_update(text):
 
 
 # ── BUILD VANTAGE POST (A1 layout, recalculated) ─────
+
+
 def reword_reasoning(reasoning, direction):
     if not reasoning:
-        return "Momentum lining up on the higher timeframe \u2014 taking the " + ("long." if direction == "BUY" else "short.")
+        return ("Momentum is lining up on the higher timeframe, so I'm taking the "
+                + ("long here." if direction == "BUY" else "short here."))
+
+    # Try to reword with the Anthropic API: keep the facts/numbers, change the wording
+    if ANTHROPIC_API_KEY:
+        try:
+            r = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": ANTHROPIC_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-sonnet-4-6",
+                    "max_tokens": 120,
+                    "messages": [{
+                        "role": "user",
+                        "content": (
+                            "Reword this trading note in a natural first-person voice (use 'I', never 'we'/'team'). "
+                            "Keep every number and indicator exactly the same. One or two short sentences, no emojis, "
+                            "no preamble \u2014 just the reworded note:\n\n" + reasoning
+                        ),
+                    }],
+                },
+                timeout=12,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                parts = [b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"]
+                out = " ".join(parts).strip()
+                if out:
+                    return out
+            else:
+                logger.warning(f"Anthropic reword {r.status_code}: {r.text[:150]}")
+        except Exception as e:
+            logger.warning(f"Anthropic reword failed: {e}")
+
+    # Fallback: light touch so it isn't identical to Kevin's
     return reasoning
 
 
@@ -229,7 +329,7 @@ async def handle_source_message(text):
         logger.info(f"Posted recalculated entry {tid}")
         return
     if is_sl_update(text):
-        await send_to_telegram(random.choice(MESSAGE_TEMPLATES["SL"]))
+        await send_to_telegram(ai_message("SL"))
         logger.info("Forwarded SL update")
     else:
         logger.info("Ignored non-actionable message")
@@ -307,19 +407,40 @@ def monitor_profits():
                 price = get_price(t["pair"])
                 if not price:
                     continue
+
+                anchor = t.get("profit_anchor", t["entry_price"])
+                pips = pips_in_profit(t["pair"], t["direction"], anchor, price)
+
+                # SL check first — closes trade, nothing else fires
                 hit_sl = (price <= t["sl"]) if t["direction"] == "BUY" else (price >= t["sl"])
                 if hit_sl:
-                    asyncio.run_coroutine_threadsafe(
-                        send_to_telegram(random.choice(MESSAGE_TEMPLATES["SL"])), loop)
                     with trade_lock:
-                        active_trades.pop(tid, None)
-                        reported_levels.pop(tid, None)
-                    logger.info(f"SL hit {tid}")
+                        if tid in active_trades:
+                            active_trades.pop(tid, None)
+                            reported_levels.pop(tid, None)
+                            asyncio.run_coroutine_threadsafe(
+                                send_to_telegram(ai_message("SL")), loop)
+                            logger.info(f"SL hit {tid}")
                     continue
-                pips = pips_in_profit(t["pair"], t["direction"], t.get("profit_anchor", t["entry_price"]), price)
+
+                # Breakeven check — only if trade had gone >= 20 pips, then came back to entry
+                been_up = 20 in reported_levels.get(tid, set())
+                back_to_be = (price <= anchor) if t["direction"] == "BUY" else (price >= anchor)
+                if been_up and back_to_be and not t.get("be_sent"):
+                    with trade_lock:
+                        if tid in active_trades:
+                            active_trades[tid]["be_sent"] = True
+                            active_trades.pop(tid, None)
+                            reported_levels.pop(tid, None)
+                            asyncio.run_coroutine_threadsafe(
+                                send_to_telegram(ai_message("BE")), loop)
+                            logger.info(f"Breakeven hit {tid}")
+                    continue
+
+                # Profit levels
                 for lvl in levels:
                     if pips >= lvl and lvl not in reported_levels.get(tid, set()):
-                        txt = random.choice(MESSAGE_TEMPLATES[lvl])
+                        txt = ai_message(lvl)
                         fut = asyncio.run_coroutine_threadsafe(send_to_telegram(txt), loop)
                         try:
                             if fut.result(timeout=15):
@@ -441,11 +562,11 @@ def price():
 
 @app.route("/test/<level>", methods=["GET"])
 def test_level(level):
-    mp = {"20": 20, "40": 40, "80": 80, "tp1": 100, "150": 150, "tp2": 200, "sl": "SL"}
+    mp = {"20": 20, "40": 40, "80": 80, "tp1": 100, "150": 150, "tp2": 200, "sl": "SL", "be": "BE"}
     level = level.lower()
     if level not in mp:
         return "Use /test/20 /test/40 /test/80 /test/tp1 /test/150 /test/tp2 /test/sl", 400
-    txt = random.choice(MESSAGE_TEMPLATES[mp[level]])
+    txt = ai_message(mp[level])
     fut = asyncio.run_coroutine_threadsafe(send_to_telegram(txt), loop)
     ok = fut.result(timeout=15)
     dest = "Saved Messages" if SEND_TO_SAVED else "VANTAGE GROUP"
