@@ -30,9 +30,8 @@ OANDA_API_KEY = os.environ.get("OANDA_API_KEY", "")
 
 # ── RECALC RULES (points from source entry) ──────────
 ENTRY_WIDEN = 4.0
-TP1_POINTS = 10.0
-TP2_POINTS = 20.0
-SL_POINTS = 10.0
+TP_POINTS = 20.0    # single take profit = 20 points = 200 pips
+SL_POINTS = 10.0    # stop loss = 10 points = 100 pips
 PIP_SIZE = {"XAUUSD": 0.10, "BTCUSD": 1.0}  # price move = 1 pip
 
 # ── STATE ────────────────────────────────────────────
@@ -103,12 +102,11 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 # Fixed top headings — these NEVER change
 FIXED_HEADING = {
-    20: "\u2705\u2705\u2705 <b>20 PIPS IN PROFIT</b>",
-    40: "\u2705\u2705\u2705 <b>40 PIPS IN PROFIT</b>",
-    80: "\u2705\u2705\u2705 <b>80 PIPS IN PROFIT</b>",
-    100: "\u2705\u2705\u2705 <b>TP1 SMASHED 100+ PIPS</b>",
-    150: "\u2705\u2705\u2705 <b>150 PIPS IN PROFIT</b>",
-    200: "\u2705\u2705\u2705 <b>TP2 SMASHED 200 PIPS</b>",
+    20: "\u2705 <b>20 PIPS IN PROFIT</b>",
+    40: "\u2705 <b>40 PIPS IN PROFIT</b>",
+    80: "\u2705 <b>80 PIPS IN PROFIT</b>",
+    100: "\u2705 <b>100 PIPS IN PROFIT</b>",
+    200: "\u2705 <b>TP HIT 200 PIPS</b>",
     "SL": "\u274c <b>STOP LOSS HIT</b>",
     "BE": "\u26a0\ufe0f <b>BREAKEVEN HIT</b>",
 }
@@ -117,48 +115,47 @@ LEVEL_BRIEF = {
     20: "the trade is 20 pips in profit. Say they can secure it now or move stop loss to entry to go risk-free.",
     40: "the trade is 40 pips in profit. Say to lock in profit or trail the stop loss.",
     80: "the trade is 80 pips in profit, a big move. Say to secure profits or trail the stop loss.",
-    100: "TP1 just hit, 100 pips. Say to secure or move stop into profit and let it run to TP2.",
-    150: "the trade is 150 pips and running. Say to bank some or trail the stop loss.",
-    200: "TP2 just hit, 200 pips, huge win. Say to secure the profit.",
+    100: "the trade is 100 pips in profit, halfway to target. Say to secure some or trail the stop.",
+    200: "the take profit just hit at 200 pips, the full target. Say you've closed it, good result.",
     "SL": "the stop loss was hit. Stay positive and confident, say you'll catch the next setup.",
     "BE": "price came back to breakeven after being in profit. Congratulate anyone who secured profit earlier and say you're looking for new entries.",
 }
 
-# Fallback bottom lines (no dashes) if the API fails
+# Fallback bottom lines (calm, no emojis, no dashes) if the API fails
 FALLBACK_LINE = {
-    20: ["Secure it now or move your SL to entry and ride it risk free \U0001f4b0",
-         "Lock some in or shift your SL to entry, your call \U0001f680",
-         "Bank a bit here or go risk free by moving SL to entry \U0001f4c8"],
-    40: ["Protect it now or trail your SL up, looking strong \U0001f525",
-         "Secure some profit or let it run, SL to entry \U0001f4aa",
-         "Lock it in or trail the stop, momentum is with us \U0001f4c8"],
-    80: ["Massive move, secure profits or trail that SL up \U0001f525",
-         "Bank some here or ride it with SL trailing \U0001f680",
-         "Big one, lock profit in or let it keep flying \U0001f4b0"],
-    100: ["TP1 done! Secure it or move SL to profit and chase TP2 \U0001f3af",
-          "Smashed TP1! Lock in or let it run to the next target \U0001f525",
-          "TP1 in the bag! Protect it or ride toward TP2 \U0001f4b0"],
-    150: ["150 up and flying! Bank some or trail the stop \U0001f525",
-          "Monster run! Secure profit or let it keep going \U0001f680",
-          "Still climbing! Lock some in or trail your SL up \U0001f4c8"],
-    200: ["TP2 smashed! Huge result, banking this one \U0001f4b0",
-          "200 pips done! Locking in a beauty \U0001f525",
-          "TP2 hit! Securing this massive win \U0001f3af"],
-    "SL": ["Stopped out this time, no stress, I'll catch the next one \U0001f4aa",
-           "That one didn't go my way, already hunting the next setup \U0001f3af",
-           "Took the loss, I'll be right back with the next entry \U0001f680"],
-    "BE": ["Back to breakeven. If you secured profit earlier, well done! I'm looking for new entries \U0001f4b0",
-           "Breakeven now. Hope you banked some on the way up! Hunting the next setup \U0001f680",
-           "Came back to entry. Congrats if you locked profit in! On to the next one \U0001f525"],
+    20: ["Secure it now or move your SL to entry and let it run risk free",
+         "I'm moving my stop to entry, you can close here if you want",
+         "Lock some in or shift your SL to entry, your call"],
+    40: ["Protect it now or trail your SL up, looking strong",
+         "I'm trailing my stop, secure some profit if you want",
+         "Lock it in here or let it run, momentum looks good"],
+    80: ["Good move now, secure profits or trail your SL up",
+         "I'm trailing my stop higher, bank some if you want",
+         "Strong run, lock profit in or let it keep going"],
+    100: ["100 pips up now, secure some or trail your stop",
+          "Halfway to target, lock a bit in or let it run",
+          "100 in profit, I'm trailing my stop, close some if you want"],
+    200: ["TP hit at 200 pips, I've closed this one, good result",
+          "Target reached, 200 pips, banking it here",
+          "TP done, closed the full 200 pips, happy with that"],
+    "SL": ["Stopped out this time, no worries, I'll catch the next one",
+           "That one didn't work out, already looking for the next setup",
+           "Took the loss on this, I'll be back with the next entry"],
+    "BE": ["Back to breakeven. If you secured profit earlier, well done. I'm looking for new entries",
+           "Came back to entry. Hope you locked some in, I'm watching for the next setup",
+           "Breakeven now. Nice if you banked some, I'll find the next entry"],
 }
 
 
 def _clean_line(text):
-    # strip any em/en dashes and stray heading the model may add
+    # strip any em/en dashes
     text = text.replace("\u2014", ",").replace("\u2013", ",").replace(" - ", ", ")
     # remove a leading bold heading if the model added one
     text = re.sub(r"^\s*<b>.*?</b>\s*", "", text).strip()
-    # keep it to the first 1-2 sentences
+    # strip emojis / pictographs
+    text = re.sub(
+        "[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF\u2705\u274c\u26a0\ufe0f]",
+        "", text).strip()
     return text.strip()
 
 
@@ -180,10 +177,11 @@ def ai_message(level):
                     "messages": [{
                         "role": "user",
                         "content": (
-                            "You're a hype, punchy gold/forex trader. Write ONE short line (max ~18 words) to your followers. "
-                            "High energy, 1-2 emojis, first person 'I' only, NEVER 'we'/'team'/'us'/'group'. "
-                            "ABSOLUTELY NO dashes of any kind (no - no \u2013 no \u2014); use commas or full stops instead. "
-                            "Do NOT include any heading or ticks, just the single line. Vary it so it never repeats. "
+                            "You're a real gold/forex trader posting a short, calm update to your followers. "
+                            "Write ONE natural line (max ~16 words). Sound like a relaxed human, not hyped, not salesy. "
+                            "NO emojis at all. First person 'I' only, never 'we'/'team'/'us'/'group'. "
+                            "ABSOLUTELY NO dashes of any kind (no - no \u2013 no \u2014); use commas or full stops. "
+                            "No heading, no ticks, just the single calm line. Vary it subtly so it isn't identical each time. "
                             "Context: " + brief
                         ),
                     }],
@@ -338,32 +336,71 @@ def reword_reasoning(reasoning, direction):
     return reasoning
 
 
+def ai_entry_line(name, direction, elow, ehigh, tp, sl, dec):
+    """Short, natural, human one-liner announcing the trade. AI with fallback."""
+    verb = "buying" if direction == "BUY" else "selling"
+    facts = (f"{verb} {name}, entries {elow:.{dec}f} to {ehigh:.{dec}f}, "
+             f"take profit {tp:.{dec}f}, stop loss {sl:.{dec}f}")
+    if ANTHROPIC_API_KEY:
+        try:
+            r = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": ANTHROPIC_API_KEY,
+                         "anthropic-version": "2023-06-01",
+                         "content-type": "application/json"},
+                json={
+                    "model": "claude-sonnet-4-6",
+                    "max_tokens": 90,
+                    "messages": [{
+                        "role": "user",
+                        "content": (
+                            "You're a real trader quickly posting a trade to your group on Telegram. "
+                            "Write it as ONE short natural message like a human texting, not a formatted card. "
+                            "Must include all these numbers exactly: " + facts + ". "
+                            "First person 'I'. No emojis. No dashes (no - no \u2013 no \u2014), use commas. "
+                            "Keep it casual and short, vary the opening (e.g. 'Buying gold now', 'Looking to buy gold here', "
+                            "'Getting into gold'). Output only the message."
+                        ),
+                    }],
+                },
+                timeout=12,
+            )
+            if r.status_code == 200:
+                parts = [b.get("text", "") for b in r.json().get("content", []) if b.get("type") == "text"]
+                out = _clean_line(" ".join(parts))
+                if out:
+                    return out
+        except Exception as e:
+            logger.warning(f"Anthropic entry line failed: {e}")
+    # Fallback natural lines
+    openers = {
+        "BUY": [f"Buying {name} now. Entries {elow:.{dec}f} to {ehigh:.{dec}f}, TP {tp:.{dec}f}, SL {sl:.{dec}f}",
+                f"Looking to buy {name} here, entries {elow:.{dec}f} to {ehigh:.{dec}f}. TP {tp:.{dec}f}, SL {sl:.{dec}f}",
+                f"Getting into {name} long. {elow:.{dec}f} to {ehigh:.{dec}f}, target {tp:.{dec}f}, stop {sl:.{dec}f}"],
+        "SELL": [f"Selling {name} now. Entries {elow:.{dec}f} to {ehigh:.{dec}f}, TP {tp:.{dec}f}, SL {sl:.{dec}f}",
+                 f"Looking to sell {name} here, entries {elow:.{dec}f} to {ehigh:.{dec}f}. TP {tp:.{dec}f}, SL {sl:.{dec}f}",
+                 f"Getting into {name} short. {elow:.{dec}f} to {ehigh:.{dec}f}, target {tp:.{dec}f}, stop {sl:.{dec}f}"],
+    }
+    return random.choice(openers[direction])
+
+
 def build_entry_post(sig):
     pair, direction, base = sig["pair"], sig["direction"], sig["entry_low"]
     if direction == "BUY":
         e1, e2 = base, base + ENTRY_WIDEN
-        tp1, tp2, sl = base + TP1_POINTS, base + TP2_POINTS, base - SL_POINTS
+        tp, sl = base + TP_POINTS, base - SL_POINTS
     else:
         e1, e2 = base, base - ENTRY_WIDEN
-        tp1, tp2, sl = base - TP1_POINTS, base - TP2_POINTS, base + SL_POINTS
+        tp, sl = base - TP_POINTS, base + SL_POINTS
     elow, ehigh = min(e1, e2), max(e1, e2)
-    name = "GOLD" if pair == "XAUUSD" else "BITCOIN"
-    arrow = "\U0001f7e2" if direction == "BUY" else "\U0001f534"
+    name = "gold" if pair == "XAUUSD" else "bitcoin"
     dec = 2 if pair == "XAUUSD" else 1
-    reasoning = reword_reasoning(sig["reasoning"], direction)
-    post = (
-        f"{arrow} <b>{name} \u2014 {direction} SETUP</b>\n"
-        f"\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"
-        f"Entry: {elow:.{dec}f} \u2013 {ehigh:.{dec}f}\n\n"
-        f"\U0001f3af TP1   {tp1:.{dec}f}\n"
-        f"\U0001f3af TP2   {tp2:.{dec}f}\n"
-        f"\U0001f6d1 SL    {sl:.{dec}f}\n"
-        f"\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"
-        f"\U0001f4a1 {reasoning}"
-    )
+
+    post = ai_entry_line(name, direction, elow, ehigh, tp, sl, dec)
+
     trade = {"pair": pair, "direction": direction, "entry_price": base,
              "profit_anchor": (ehigh if direction == "BUY" else elow),
-             "tp1": tp1, "tp2": tp2, "sl": sl, "timestamp": time.time(), "status": "open"}
+             "tp": tp, "sl": sl, "timestamp": time.time(), "status": "open"}
     return post, trade
 
 
@@ -377,10 +414,11 @@ async def handle_source_message(text):
     if sig:
         post, trade = build_entry_post(sig)
         tid = f"{sig['pair']}_{int(time.time())}"
+        entry_msg_id = await send_to_telegram(post)
+        trade["entry_msg_id"] = entry_msg_id
         with trade_lock:
             active_trades[tid] = trade
             reported_levels[tid] = set()
-        await send_to_telegram(post)
         logger.info(f"Posted recalculated entry {tid}")
         return
     if is_sl_update(text):
@@ -419,20 +457,21 @@ def get_price(pair):
     return get_oanda_price(pair)
 
 
-async def send_to_telegram(text):
+async def send_to_telegram(text, reply_to_id=None):
     global client
     try:
         if not client or not await client.is_user_authorized():
             logger.error("Client not authorized")
-            return False
+            return None
         entity = "me" if SEND_TO_SAVED else await client.get_entity(VANTAGE_GROUP_ID)
-        reply = VANTAGE_TOPIC_ID if (not SEND_TO_SAVED and VANTAGE_TOPIC_ID) else None
-        await client.send_message(entity, text, parse_mode="html", reply_to=reply)
+        # reply to the entry message if given, else the topic (in group mode)
+        reply = reply_to_id if reply_to_id else (VANTAGE_TOPIC_ID if (not SEND_TO_SAVED and VANTAGE_TOPIC_ID) else None)
+        msg = await client.send_message(entity, text, parse_mode="html", reply_to=reply)
         logger.info("Message sent")
-        return True
+        return msg.id
     except Exception as e:
         logger.error(f"Send error: {e}")
-        return False
+        return None
 
 
 def pips_in_profit(pair, direction, entry, current):
@@ -443,8 +482,8 @@ def pips_in_profit(pair, direction, entry, current):
 
 # ── PRICE MONITOR ────────────────────────────────────
 def monitor_profits():
-    logger.info("Profit monitor started (OANDA 10s)")
-    levels = [20, 40, 80, 100, 150, 200]
+    logger.info("Profit monitor started (10s)")
+    levels = [20, 40, 80, 100, 200]   # 200 = TP HIT (closes trade)
     while True:
         try:
             now = time.time()
@@ -471,10 +510,11 @@ def monitor_profits():
                 if hit_sl:
                     with trade_lock:
                         if tid in active_trades:
+                            rid = active_trades[tid].get("entry_msg_id")
                             active_trades.pop(tid, None)
                             reported_levels.pop(tid, None)
                             asyncio.run_coroutine_threadsafe(
-                                send_to_telegram(ai_message("SL")), loop)
+                                send_to_telegram(ai_message("SL"), reply_to_id=rid), loop)
                             logger.info(f"SL hit {tid}")
                     continue
 
@@ -484,27 +524,35 @@ def monitor_profits():
                 if been_up and back_to_be and not t.get("be_sent"):
                     with trade_lock:
                         if tid in active_trades:
-                            active_trades[tid]["be_sent"] = True
+                            rid = active_trades[tid].get("entry_msg_id")
                             active_trades.pop(tid, None)
                             reported_levels.pop(tid, None)
                             asyncio.run_coroutine_threadsafe(
-                                send_to_telegram(ai_message("BE")), loop)
+                                send_to_telegram(ai_message("BE"), reply_to_id=rid), loop)
                             logger.info(f"Breakeven hit {tid}")
                     continue
 
-                # Profit levels
+                # Profit levels (200 = TP HIT, closes the trade)
+                rid = t.get("entry_msg_id")
                 for lvl in levels:
                     if pips >= lvl and lvl not in reported_levels.get(tid, set()):
                         txt = ai_message(lvl)
-                        fut = asyncio.run_coroutine_threadsafe(send_to_telegram(txt), loop)
+                        fut = asyncio.run_coroutine_threadsafe(
+                            send_to_telegram(txt, reply_to_id=rid), loop)
                         try:
-                            if fut.result(timeout=15):
+                            if fut.result(timeout=15) is not None:
                                 with trade_lock:
                                     if tid in reported_levels:
                                         reported_levels[tid].add(lvl)
                                 logger.info(f"{lvl} pips alert ({tid})")
                         except Exception as e:
                             logger.error(f"Alert send failed: {e}")
+                        if lvl == 200:  # TP hit — close the trade
+                            with trade_lock:
+                                active_trades.pop(tid, None)
+                                reported_levels.pop(tid, None)
+                            logger.info(f"TP hit, closed {tid}")
+                            break
         except Exception as e:
             logger.error(f"Monitor error: {e}")
         time.sleep(10)
@@ -545,7 +593,7 @@ def reset():
 def status():
     with trade_lock:
         info = [{"trade_id": tid, "pair": t["pair"], "direction": t["direction"],
-                 "entry": t["entry_price"], "tp1": t["tp1"], "tp2": t["tp2"], "sl": t["sl"],
+                 "entry": t["entry_price"], "tp": t.get("tp"), "sl": t["sl"],
                  "reported": list(reported_levels.get(tid, []))}
                 for tid, t in active_trades.items()]
     return jsonify({"mode": "SAVED" if SEND_TO_SAVED else "VANTAGE",
@@ -617,10 +665,10 @@ def price():
 
 @app.route("/test/<level>", methods=["GET"])
 def test_level(level):
-    mp = {"20": 20, "40": 40, "80": 80, "tp1": 100, "150": 150, "tp2": 200, "sl": "SL", "be": "BE"}
+    mp = {"20": 20, "40": 40, "80": 80, "100": 100, "tp": 200, "sl": "SL", "be": "BE"}
     level = level.lower()
     if level not in mp:
-        return "Use /test/20 /test/40 /test/80 /test/tp1 /test/150 /test/tp2 /test/sl", 400
+        return "Use /test/20 /test/40 /test/80 /test/100 /test/tp /test/sl /test/be", 400
     txt = ai_message(mp[level])
     fut = asyncio.run_coroutine_threadsafe(send_to_telegram(txt), loop)
     ok = fut.result(timeout=15)
