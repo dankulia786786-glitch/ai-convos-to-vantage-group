@@ -82,7 +82,6 @@ HEADINGS = {
         "✅ <b>20 PIPS IN PROFIT</b>",
         "✅ <b>20 PIPS UP ALREADY</b>",
         "✅ <b>20 PIPS GREEN ALREADY</b>",
-        "✅ <b>20 PIPS DOWN</b>",
     ],
     60: [
         "✅ <b>60 PIPS IN PROFIT</b>",
@@ -203,7 +202,7 @@ def _ask_claude(prompt, max_tokens=90):
             headers={"x-api-key": ANTHROPIC_API_KEY,
                      "anthropic-version": "2023-06-01",
                      "content-type": "application/json"},
-            json={"model": "claude-sonnet-4-6",
+            json={"model": "claude-haiku-4-5-20251001",
                   "max_tokens": max_tokens,
                   "messages": [{"role": "user", "content": prompt}]},
             timeout=12,
@@ -827,13 +826,55 @@ def test_level(level):
 @app.route("/preview", methods=["GET"])
 def preview():
     """See the wording without sending anything to Telegram."""
-    out = ["ENTRY:", entry_message("gold", "BUY", 4044.50, 4046.50,
-                                   4064.50, 4038.50, 2), ""]
+    demo_post, demo_trade = build_trade(
+        {"pair": "XAUUSD", "direction": "BUY", "entry": 4044.50})
+    out = ["ENTRY (real maths, signal price 4044.50):", demo_post,
+           f"  anchor {demo_trade['profit_anchor']}  "
+           f"tp {demo_trade['tp']}  sl {demo_trade['sl']}", ""]
     for lvl in ALERT_LEVELS + ["SL", "BE"]:
         out.append(f"{lvl}:")
         out.append(alert_message(lvl).replace("<b>", "").replace("</b>", ""))
         out.append("")
     return "\n".join(out), 200
+
+
+@app.route("/diag", methods=["GET"])
+def diag():
+    """Is Claude actually answering, or are we silently on fallbacks?"""
+    lines = []
+    if not ANTHROPIC_API_KEY:
+        return "ANTHROPIC_API_KEY not set. Running on fallback wording only.", 200
+
+    try:
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": ANTHROPIC_API_KEY,
+                     "anthropic-version": "2023-06-01",
+                     "content-type": "application/json"},
+            json={"model": "claude-haiku-4-5-20251001",
+                  "max_tokens": 40,
+                  "messages": [{"role": "user",
+                                "content": "Reply with exactly: OK"}]},
+            timeout=15,
+        )
+        lines.append(f"HTTP status: {r.status_code}")
+        if r.status_code == 200:
+            body = r.json()
+            txt = " ".join(b.get("text", "") for b in body.get("content", []))
+            lines.append(f"Reply: {txt.strip()}")
+            lines.append("")
+            lines.append("WORKING. Wording will be fresh every time.")
+        else:
+            lines.append(f"Error body: {r.text[:400]}")
+            lines.append("")
+            lines.append("NOT WORKING. Bot is using the fallback lines.")
+            lines.append("401 = bad or revoked key. 404 = wrong model name.")
+            lines.append("400 = malformed request. 429 = rate limited or no credit.")
+    except Exception as e:
+        lines.append(f"Request failed entirely: {e}")
+        lines.append("NOT WORKING. Bot is using the fallback lines.")
+
+    return "\n".join(lines), 200
 
 
 @app.route("/debug_channel", methods=["GET"])
