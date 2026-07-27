@@ -8,6 +8,7 @@ import random
 from flask import Flask, request, jsonify
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
+from telethon.errors import SessionPasswordNeededError
 import requests
 
 logging.basicConfig(level=logging.INFO)
@@ -41,10 +42,6 @@ active_trades = {}
 trade_lock = threading.Lock()
 reported_levels = {}
 last_channel_msgs = []  # debug: last messages seen from source channel
-
-# Session generation state
-pending_auth = {}  # phone -> {"hash": hash, "phone_hash": phone_hash}
-auth_lock = threading.Lock()
 
 
 def run_loop():
@@ -628,56 +625,84 @@ threading.Thread(target=monitor_profits, daemon=True).start()
 
 
 # ── SESSION GENERATION ENDPOINTS ─────────────────────
-auth_client_cache = {}  # phone -> TelegramClient instance
+# IMPORTANT: the Telegram client that SENDS the code must be the SAME client
+# that signs in. The phone_code_hash is tied to that client's auth key, so we
+# keep the client alive between /send_code and /verify.
+auth_clients = {}  # phone -> {"client": TelegramClient, "hash": str, "ts": float}
 
 
 async def _send_code(phone):
-    """Send code to phone, return phone_hash for verification."""
+    """Send login code to phone. Keeps the client alive for /verify."""
     try:
+        # drop any previous half-finished attempt for this phone
+        old = auth_clients.pop(phone, None)
+        if old:
+            try:
+                await old["client"].disconnect()
+            except Exception:
+                pass
+
         tc = TelegramClient(StringSession(), API_ID, API_HASH)
         await tc.connect()
         result = await tc.send_code_request(phone)
-        await tc.disconnect()
+        auth_clients[phone] = {
+            "client": tc,
+            "hash": result.phone_code_hash,
+            "ts": time.time(),
+        }
         return result.phone_code_hash
     except Exception as e:
         logger.error(f"send_code error: {e}")
         return None
 
 
-async def _verify(phone, code, phone_hash):
-    """Verify code and return SESSION_STRING."""
+async def _verify(phone, code, password=None):
+    """Sign in with the SAME client that sent the code. Returns (session, error)."""
+    entry = auth_clients.get(phone)
+    if not entry:
+        return None, "No pending code for this phone. Call /send_code first."
+
+    tc = entry["client"]
     try:
-        tc = TelegramClient(StringSession(), API_ID, API_HASH)
-        await tc.connect()
-        await tc.sign_in(phone, code, phone_code_hash=phone_hash)
+        try:
+            await tc.sign_in(phone, code, phone_code_hash=entry["hash"])
+        except SessionPasswordNeededError:
+            if not password:
+                return None, ("This account has 2FA enabled. "
+                              "Call /verify again with &password=YOUR_2FA_PASSWORD")
+            await tc.sign_in(password=password)
+
         ss = tc.session.save()
+        me = await tc.get_me()
+        name = f"{me.first_name or ''} (@{me.username or 'no username'})".strip()
         await tc.disconnect()
-        return ss
+        auth_clients.pop(phone, None)
+        return {"session": ss, "account": name}, None
+
     except Exception as e:
         logger.error(f"verify error: {e}")
-        return None
+        return None, str(e)
 
 
 @app.route("/send_code", methods=["GET"])
 def send_code_endpoint():
-    """Send code to phone. Usage: /send_code?phone=+447735039230"""
+    """Send login code. Usage: /send_code?phone=+447700000000"""
     try:
-        phone = request.args.get("phone", "").strip()
-        if not phone or not phone.startswith("+"):
-            return jsonify({"error": "phone required, format: +447735039230"}), 400
+        phone = request.args.get("phone", "").strip().replace(" ", "")
+        if not phone.startswith("+"):
+            return jsonify({"error": "phone required in full format, e.g. +447700000000"}), 400
 
         fut = asyncio.run_coroutine_threadsafe(_send_code(phone), loop)
-        phone_hash = fut.result(timeout=30)
+        phone_hash = fut.result(timeout=45)
 
         if not phone_hash:
-            return jsonify({"error": "Failed to send code. Check phone number."}), 500
-
-        with auth_lock:
-            pending_auth[phone] = {"phone_hash": phone_hash}
+            return jsonify({"error": "Failed to send code. Check the number and API_ID/API_HASH."}), 500
 
         return jsonify({
             "status": "ok",
-            "message": f"Code sent to {phone}. Now call /verify?phone={phone}&code=XXXXX"
+            "message": f"Code sent to {phone}",
+            "next": f"/verify?phone={phone}&code=XXXXX",
+            "note": "Do NOT redeploy or restart before verifying, it wipes the pending login."
         }), 200
 
     except Exception as e:
@@ -687,36 +712,27 @@ def send_code_endpoint():
 
 @app.route("/verify", methods=["GET"])
 def verify_endpoint():
-    """Verify code and return SESSION_STRING. Usage: /verify?phone=+447735039230&code=12345"""
+    """Verify the code. Usage: /verify?phone=+447700000000&code=12345[&password=2fa]"""
     try:
-        phone = request.args.get("phone", "").strip()
+        phone = request.args.get("phone", "").strip().replace(" ", "")
         code = request.args.get("code", "").strip()
+        password = request.args.get("password", "").strip() or None
 
         if not phone or not code:
-            return jsonify({"error": "phone and code required"}), 400
+            return jsonify({"error": "phone and code are both required"}), 400
 
-        with auth_lock:
-            if phone not in pending_auth:
-                return jsonify({"error": "Phone not found in pending auth. Call /send_code first."}), 400
-            phone_hash = pending_auth[phone].get("phone_hash")
+        fut = asyncio.run_coroutine_threadsafe(_verify(phone, code, password), loop)
+        result, err = fut.result(timeout=45)
 
-        if not phone_hash:
-            return jsonify({"error": "Invalid auth state. Call /send_code again."}), 400
-
-        fut = asyncio.run_coroutine_threadsafe(_verify(phone, code, phone_hash), loop)
-        session_string = fut.result(timeout=30)
-
-        if not session_string:
-            return jsonify({"error": "Code verification failed. Check code and try again."}), 500
-
-        with auth_lock:
-            pending_auth.pop(phone, None)
+        if err:
+            return jsonify({"error": err}), 400
 
         return jsonify({
             "status": "ok",
             "phone": phone,
-            "SESSION_STRING": session_string,
-            "note": "Copy this SESSION_STRING to your Railway environment variables as VANTAGE_SESSION_STRING"
+            "account": result["account"],
+            "SESSION_STRING": result["session"],
+            "note": "Copy SESSION_STRING into Railway variables. Keep it secret."
         }), 200
 
     except Exception as e:
