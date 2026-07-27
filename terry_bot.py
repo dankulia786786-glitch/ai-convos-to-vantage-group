@@ -87,7 +87,7 @@ HEADINGS = {
         "✅ <b>60 PIPS IN PROFIT</b>",
         "✅ <b>60 PIPS GREEN NOW</b>",
         "✅ <b>60 PIPS UP NOW</b>",
-        "✅ <b>60 PIPS BANKED SO FAR</b>",
+        "✅ <b>60 PIPS ONSIDE</b>",
     ],
     100: [
         "✅ <b>100 PIPS IN PROFIT</b>",
@@ -114,65 +114,146 @@ HEADINGS = {
 }
 
 LEVEL_BRIEF = {
-    20: "the trade is 20 pips in profit already. Mention they can move stop to entry now and go risk free.",
-    60: "the trade is 60 pips in profit and running well. Mention securing some or trailing the stop.",
-    100: "the trade is 100 pips in profit, halfway to target. Mention locking some in or letting it run.",
-    200: "take profit just hit, the full 200 pips. Say you have closed it and you are happy with it.",
-    "SL": "the stop loss was hit. Stay calm and confident, say you will catch the next one.",
-    "BE": "price came back to entry after being in profit. Say well done to anyone who secured earlier, you are looking for the next entry.",
+    20: ("price has moved 20 pips your way. Suggest they can shift their stop "
+         "to entry now so the trade costs them nothing if it turns."),
+    60: ("price is now 60 pips onside and still moving. Say it is going well "
+         "and they can trail their stop up behind it if they want."),
+    100: ("price is 100 pips onside, halfway to the target. Say it is running "
+          "well and their stop can sit safely in profit now."),
+    200: ("price reached the full 200 pip target. Say the target is done and "
+          "you are pleased with the move."),
+    "SL": ("the stop was hit and the trade is closed. Stay calm and matter of "
+           "fact, say you are looking at the next setup."),
+    "BE": ("price drifted back to the entry level after being onside. Say "
+           "anyone who moved their stop to entry is out at nothing, and you "
+           "are watching for the next one."),
 }
 
 FALLBACK_LINE = {
     20: [
-        "Moving my stop to entry now, this one is risk free from here",
-        "Stop is going to entry, nothing to lose on it now",
-        "20 up already, I am shifting my stop to entry",
-        "Off to a good start, my stop is at entry now",
+        "20 pips onside already, shift your stop to entry and it costs you nothing",
+        "Nice start bro, get your stop to entry and ride it for free",
+        "20 up. Move your stop to entry and you cannot lose on it now",
+        "Off to a decent start, stop to entry and let it breathe",
+        "That is 20 for you bro, worth getting the stop up to entry",
+        "Moving my stop to entry here, nothing to lose from this point",
+        "20 pips in. Stop to entry and enjoy the rest of it",
+        "Good early move, I would get that stop up to entry",
+        "20 onside bro. Risk free from here if you move the stop",
+        "Straight into profit, stop goes to entry for me",
+        "20 up already, tidy start to this one",
+        "Stop is at entry for me now, 20 pips onside",
+        "Decent start bro, no reason to risk anything on it now",
+        "20 pips your way. Get the stop to entry and relax",
+        "Moved my stop up, 20 in the bag so far",
     ],
     60: [
-        "Running nicely, I am trailing my stop up behind it",
-        "60 up now, secure some here if you want to",
-        "Good move so far, I am trailing my stop higher",
-        "Happy with this one, trailing the stop as it goes",
+        "60 pips onside now, trail that stop up behind it",
+        "Running well bro, worth pulling your stop up as it goes",
+        "60 up. Stop can sit in profit from here comfortably",
+        "Nice run this one, trailing my stop behind the move",
+        "60 pips your way bro, no reason to give any of it back",
+        "Good move so far, get that stop trailing up",
+        "60 onside. I am trailing mine, you do what suits you",
+        "Momentum is with us, 60 up and still going",
+        "60 pips in bro. Trail the stop and let it work",
+        "Comfortable 60 onside now, protect it as it moves",
+        "That is 60 for you, still plenty of room to target",
+        "Trailing my stop up here, 60 onside and climbing",
+        "60 up bro, this one is behaving itself nicely",
+        "Solid 60 pips, stop is well clear of trouble now",
+        "60 onside and holding, happy with this",
     ],
     100: [
-        "100 up, halfway to my target, stop is well in profit now",
-        "Halfway there, I am letting this one keep running",
-        "100 in the bag so far, trailing my stop behind it",
-        "Nice run this, secure some or ride it with me",
+        "100 pips onside, halfway to target and running clean",
+        "100 up bro, stop can sit well in profit now",
+        "Halfway there, 100 onside and still pushing",
+        "100 pips your way, this is behaving exactly as I wanted",
+        "That is 100 bro. Halfway to target with room left",
+        "Trailing my stop again here, 100 onside",
+        "100 up and moving, target is well within reach",
+        "Halfway to the target now, 100 pips clear",
+        "100 pips onside bro, keep that stop moving with it",
+        "Clean 100 up, letting this one run to target",
+        "100 onside. Stop is deep in profit, nothing to worry about",
+        "Halfway home bro, 100 pips and holding strong",
+        "100 up. This is the sort of run you wait for",
+        "Nicely onside now at 100, target next",
+        "100 pips in profit, still plenty in this move",
     ],
     200: [
-        "Target hit, 200 pips, I have closed this one out",
-        "That is the full 200, closed and banked, happy with that",
-        "TP done at 200 pips, closing it here, good one",
-        "Full target reached, 200 pips secured, on to the next",
+        "Target done, full 200 pips, very happy with that one",
+        "200 pips bro, target reached and closed out",
+        "That is the full 200, exactly where I wanted it",
+        "Target hit at 200 pips, clean run from start to finish",
+        "200 done bro. Textbook move that one",
+        "Full target reached, 200 pips, on to the next",
+        "200 pips banked, that is the trade done",
+        "Target smashed at 200, pleased with how that ran",
+        "That is 200 bro, closing this one out here",
+        "Full 200 pips, exactly to target, happy days",
+        "Target reached. 200 pips and this one is finished",
+        "200 onside and target done, cannot ask for more",
+        "Closed at target bro, full 200 pips on it",
+        "That is the 200 done, clean trade all the way",
+        "Target hit, 200 pips secured, that is that one wrapped",
     ],
     "SL": [
-        "Stopped out on this one, no drama, on to the next setup",
-        "That one did not go my way, already looking at the next",
-        "Took the stop, it happens, I will be back with the next entry",
-        "Not this time, I am watching for the next one now",
+        "Stopped out on this one, on to the next setup",
+        "Not this time bro, already looking at the next one",
+        "Took the stop, happens, next one is out there",
+        "That one did not work, watching for the next entry",
+        "Stopped out bro, no drama, plenty more coming",
+        "Did not go my way this time, back to the charts",
+        "Stop hit. Part of it, on to the next",
+        "Wrong side of that one bro, next setup is coming",
+        "Took the loss, moving on, I will find the next",
+        "Stopped out. Nothing to dwell on, next one",
+        "That one got me bro, already hunting the next",
+        "Loss on this one, it happens, staying patient",
+        "Stop taken, market had other ideas, next up",
+        "Not our one bro, watching for a fresh setup",
+        "Stopped. On to the next, no point overthinking it",
     ],
     "BE": [
-        "Back at entry, if you secured earlier then well done, looking for the next one",
-        "Came back to my entry, nothing lost, hunting the next setup",
-        "Breakeven on this, hope you banked some on the way up",
-        "Back to entry, out at nothing, I am watching for a new one",
+        "Back to entry. Anyone who moved their stop is out at nothing",
+        "Came back to entry bro, no harm done if your stop was there",
+        "Drifted back to entry, that is why the stop goes up early",
+        "Back at entry level. Out at nothing, watching for the next",
+        "Returned to entry bro, no loss if you moved your stop",
+        "Back to where it started, nothing lost, next one coming",
+        "Entry level again. That stop move earlier paid off",
+        "Came all the way back bro, out flat, on to the next",
+        "Back to entry, no damage, looking for a fresh setup",
+        "Right back to entry. Out at breakeven, no complaints",
+        "Drifted back bro, glad the stop was at entry",
+        "Entry hit again, flat on it, watching the charts",
+        "Back to breakeven, nothing gained nothing lost",
+        "Came back to entry bro, that is the game sometimes",
+        "Out at entry. Next setup is what matters now",
     ],
 }
 
 ENTRY_FALLBACK = {
     "BUY": [
-        "Buying {name} here, {elow} to {ehigh}. TP {tp}, SL {sl}",
-        "Getting long {name} now, entry {elow} to {ehigh}, target {tp}, stop {sl}",
-        "Taking a buy on {name}, {elow} to {ehigh}. TP {tp}, SL {sl}",
-        "In on {name} long from {elow} to {ehigh}, TP {tp} and stop at {sl}",
+        "Buying gold here {elow} to {ehigh}. TP {tp}, SL {sl}",
+        "In long on gold bro, {elow} to {ehigh}. Target {tp}, stop {sl}",
+        "Getting long gold, entry {elow} to {ehigh}, TP {tp}, SL {sl}",
+        "Taking a buy on gold {elow} to {ehigh}. TP {tp}, SL {sl}",
+        "Long gold from {elow} to {ehigh} bro. Target {tp}, stop at {sl}",
+        "Just gone long gold, {elow} to {ehigh}, TP {tp} and SL {sl}",
+        "Buying this area {elow} to {ehigh}. TP {tp}, SL {sl}",
+        "In on gold long bro, {elow} to {ehigh}, target {tp}, stop {sl}",
     ],
     "SELL": [
-        "Selling {name} here, {elow} to {ehigh}. TP {tp}, SL {sl}",
-        "Getting short {name} now, entry {elow} to {ehigh}, target {tp}, stop {sl}",
-        "Taking a sell on {name}, {elow} to {ehigh}. TP {tp}, SL {sl}",
-        "In on {name} short from {elow} to {ehigh}, TP {tp} and stop at {sl}",
+        "Selling gold here {elow} to {ehigh}. TP {tp}, SL {sl}",
+        "In short on gold bro, {elow} to {ehigh}. Target {tp}, stop {sl}",
+        "Getting short gold, entry {elow} to {ehigh}, TP {tp}, SL {sl}",
+        "Taking a sell on gold {elow} to {ehigh}. TP {tp}, SL {sl}",
+        "Short gold from {elow} to {ehigh} bro. Target {tp}, stop at {sl}",
+        "Just gone short gold, {elow} to {ehigh}, TP {tp} and SL {sl}",
+        "Selling this area {elow} to {ehigh}. TP {tp}, SL {sl}",
+        "In on gold short bro, {elow} to {ehigh}, target {tp}, stop {sl}",
     ],
 }
 
@@ -236,13 +317,24 @@ def alert_message(level):
     line = None
     for _ in range(2):
         candidate = _ask_claude(
-            "You are a real gold trader posting a short personal update to your "
-            "own Telegram group. Write ONE natural line, max 16 words. "
-            "Sound like a relaxed human texting, not a signals service. "
-            "No emojis. No dashes of any kind, use commas or full stops. "
-            "First person 'I' only, never 'we', 'team', 'guys' or 'everyone'. "
-            "Never mention joining anything, prices, links or other services. "
-            "No heading, just the single line. Vary it so it is not the same as last time. "
+            "You are a UK gold trader dropping a quick message in your own "
+            "Telegram group. Write ONE line, max 18 words.\n\n"
+            "VOICE: relaxed, casual, like texting a mate. British, not American. "
+            "Say 'bro' sometimes, roughly one message in three, and only where it "
+            "lands naturally. Never force it. Never say 'guys', 'team', 'fam' or "
+            "'everyone'. Use 'I' for yourself and 'you' when talking to them.\n\n"
+            "HARD RULES, breaking any of these makes the message unusable:\n"
+            "- Never claim a specific action you took with your position. No "
+            "'closed half', 'took partials', 'locked in half', 'banked some'. "
+            "You do not know what was actually done.\n"
+            "- Never invent a number. The only figure allowed is the pip level "
+            "in the context. No prices, no lot sizes, no fractions, no percentages.\n"
+            "- Never reference time. No 'today', 'this morning', 'all week'.\n"
+            "- Never mention joining, subscribing, links, VIP or any service.\n"
+            "- No emojis. No dashes of any kind, use commas or full stops.\n"
+            "- No heading, no ticks, output the single line only.\n\n"
+            "Stick to what the price has done and what they could do about it. "
+            "Vary the opening so it is not the same as last time.\n\n"
             "Context: " + brief
         )
         if candidate and _not_a_repeat(candidate):
@@ -267,20 +359,32 @@ def entry_message(name, direction, elow, ehigh, tp, sl, dec):
              f"take profit {tp:.{dec}f}, stop loss {sl:.{dec}f}")
 
     out = _ask_claude(
-        "You are a real trader posting your own trade to your Telegram group. "
-        "Write ONE short natural message like a human texting, not a formatted card. "
-        "Include all these numbers exactly and nothing else numeric: " + facts + ". "
-        "First person 'I'. No emojis. No dashes, use commas. "
+        "You are a UK gold trader posting your own trade into your Telegram "
+        "group. Write ONE short message like a human texting a mate, not a "
+        "formatted signal card.\n\n"
+        "Include these numbers exactly, and no other numbers at all: "
+        + facts + ".\n\n"
+        "VOICE: casual, British, first person 'I'. You may say 'bro' but only "
+        "about one time in three and only if it reads naturally. Never 'guys', "
+        "'team' or 'fam'. No emojis. No dashes of any kind, use commas. "
+        "Never mention joining, subscribing, links, VIP or any service. "
         "Vary the opening so it is not identical each time. "
-        "Never mention joining, subscribing, links or any other service. "
         "Output only the message."
     )
     if out and _not_a_repeat(out):
         return out
 
-    tpl = random.choice(ENTRY_FALLBACK[direction])
-    return tpl.format(name=name, elow=f"{elow:.{dec}f}", ehigh=f"{ehigh:.{dec}f}",
+    pool = ENTRY_FALLBACK[direction]
+    tpl = random.choice(pool)
+    for _ in range(6):
+        if _not_a_repeat(tpl):
+            break
+        tpl = random.choice(pool)
+    line = tpl.format(elow=f"{elow:.{dec}f}", ehigh=f"{ehigh:.{dec}f}",
                       tp=f"{tp:.{dec}f}", sl=f"{sl:.{dec}f}")
+    if name != "gold":
+        line = line.replace("gold", name)
+    return line
 
 
 # ══════════════════════════════════════════════════════
