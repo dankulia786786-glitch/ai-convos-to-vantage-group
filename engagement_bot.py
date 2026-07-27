@@ -42,6 +42,10 @@ trade_lock = threading.Lock()
 reported_levels = {}
 last_channel_msgs = []  # debug: last messages seen from source channel
 
+# Session generation state
+pending_auth = {}  # phone -> {"hash": hash, "phone_hash": phone_hash}
+auth_lock = threading.Lock()
+
 
 def run_loop():
     asyncio.set_event_loop(loop)
@@ -53,44 +57,44 @@ threading.Thread(target=run_loop, daemon=True).start()
 # ── RUNNING ALERT TEMPLATES (pips) ───────────────────
 MESSAGE_TEMPLATES = {
     20: [
-        "<b>\u2705\u2705\u2705 20 PIPS IN PROFIT</b>\n\nSecure it now or move SL to entry and let it run risk-free",
-        "<b>\u2705\u2705\u2705 20 PIPS SECURED</b>\n\nClose part here or shift your SL to entry to lock it in",
-        "<b>\u2705\u2705\u2705 20 PIPS UP</b>\n\nMove SL to break even now and let the rest ride safely",
+        "<b>✅✅✅ 20 PIPS IN PROFIT</b>\n\nSecure it now or move SL to entry and let it run risk-free",
+        "<b>✅✅✅ 20 PIPS SECURED</b>\n\nClose part here or shift your SL to entry to lock it in",
+        "<b>✅✅✅ 20 PIPS UP</b>\n\nMove SL to break even now and let the rest ride safely",
     ],
     40: [
-        "<b>\u2705\u2705\u2705 40 PIPS IN PROFIT</b>\n\nLock it in \u2014 move SL to entry or close part to secure gains",
-        "<b>\u2705\u2705\u2705 40 PIPS SECURED</b>\n\nProtect your profit, shift SL to break even and let it run",
-        "<b>\u2705\u2705\u2705 40 PIPS RUNNING NICELY</b>\n\nSecure some profit or trail your SL to entry",
+        "<b>✅✅✅ 40 PIPS IN PROFIT</b>\n\nLock it in — move SL to entry or close part to secure gains",
+        "<b>✅✅✅ 40 PIPS SECURED</b>\n\nProtect your profit, shift SL to break even and let it run",
+        "<b>✅✅✅ 40 PIPS RUNNING NICELY</b>\n\nSecure some profit or trail your SL to entry",
     ],
     80: [
-        "<b>\u2705\u2705\u2705 80 PIPS IN PROFIT</b>\n\nBig move \u2014 secure profits or move SL to entry and let it run",
-        "<b>\u2705\u2705\u2705 80 PIPS SECURED</b>\n\nClose all to bank it or trail SL up to protect this run",
-        "<b>\u2705\u2705\u2705 80 PIPS FLYING</b>\n\nSecure your profit or move SL to entry and stay in for more",
+        "<b>✅✅✅ 80 PIPS IN PROFIT</b>\n\nBig move — secure profits or move SL to entry and let it run",
+        "<b>✅✅✅ 80 PIPS SECURED</b>\n\nClose all to bank it or trail SL up to protect this run",
+        "<b>✅✅✅ 80 PIPS FLYING</b>\n\nSecure your profit or move SL to entry and stay in for more",
     ],
     100: [
-        "<b>\u2705\u2705\u2705 TP1 SMASHED 100+ PIPS</b>\n\nSecure profits or move SL to entry and let it run to TP2!",
-        "<b>\u2705\u2705\u2705 TP1 HIT 100 PIPS IN PROFIT</b>\n\nLock it in, move SL into profit and ride toward TP2!",
-        "<b>\u2705\u2705\u2705 TP1 SMASHED 100 PIPS</b>\n\nSecure your gains now or let it run risk-free to the next target!",
+        "<b>✅✅✅ TP1 SMASHED 100+ PIPS</b>\n\nSecure profits or move SL to entry and let it run to TP2!",
+        "<b>✅✅✅ TP1 HIT 100 PIPS IN PROFIT</b>\n\nLock it in, move SL into profit and ride toward TP2!",
+        "<b>✅✅✅ TP1 SMASHED 100 PIPS</b>\n\nSecure your gains now or let it run risk-free to the next target!",
     ],
     150: [
-        "<b>\u2705\u2705\u2705 150 PIPS RUNNING</b>\n\nMonster move \u2014 secure profits or trail your SL and let it push on!",
-        "<b>\u2705\u2705\u2705 150 PIPS IN PROFIT</b>\n\nBank some now or move SL deep into profit and ride toward TP2!",
-        "<b>\u2705\u2705\u2705 150 PIPS AND CLIMBING</b>\n\nProtect this run \u2014 close part or trail SL up to lock it in!",
+        "<b>✅✅✅ 150 PIPS RUNNING</b>\n\nMonster move — secure profits or trail your SL and let it push on!",
+        "<b>✅✅✅ 150 PIPS IN PROFIT</b>\n\nBank some now or move SL deep into profit and ride toward TP2!",
+        "<b>✅✅✅ 150 PIPS AND CLIMBING</b>\n\nProtect this run — close part or trail SL up to lock it in!",
     ],
     200: [
-        "<b>\u2705\u2705\u2705 TP2 SMASHED 200 PIPS</b>\n\nHuge result \u2014 I'm securing profit here. What a run!",
-        "<b>\u2705\u2705\u2705 TP2 HIT 200 PIPS IN PROFIT</b>\n\nBanking it now \u2014 locked in a big win!",
-        "<b>\u2705\u2705\u2705 TP2 DONE 200 PIPS SECURED</b>\n\nClosing it out and enjoying the profit!",
+        "<b>✅✅✅ TP2 SMASHED 200 PIPS</b>\n\nHuge result — I'm securing profit here. What a run!",
+        "<b>✅✅✅ TP2 HIT 200 PIPS IN PROFIT</b>\n\nBanking it now — locked in a big win!",
+        "<b>✅✅✅ TP2 DONE 200 PIPS SECURED</b>\n\nClosing it out and enjoying the profit!",
     ],
     "SL": [
-        "\u274c <b>STOP LOSS HIT</b>\n\nStopped out this time \u2014 no worries, I'll catch the next one. \ud83d\udcaa",
-        "\u274c <b>STOP LOSS HIT</b>\n\nThat one didn't work \u2014 I'm already hunting the next setup. \ud83c\udfaf",
-        "\u274c <b>STOP LOSS HIT</b>\n\nNo worries, I'll try again on the next entry. \ud83d\ude80",
+        "❌ <b>STOP LOSS HIT</b>\n\nStopped out this time — no worries, I'll catch the next one. 💪",
+        "❌ <b>STOP LOSS HIT</b>\n\nThat one didn't work — I'm already hunting the next setup. 🏄",
+        "❌ <b>STOP LOSS HIT</b>\n\nNo worries, I'll try again on the next entry. 🚀",
     ],
     "BE": [
-        "\u26a0\ufe0f <b>BREAKEVEN HIT</b>\n\nFor those who secured profit earlier \u2014 congratulations! I'm now looking for new entries.",
-        "\u26a0\ufe0f <b>BACK TO BREAKEVEN</b>\n\nIf you locked in profit, well done! I'm watching for the next setup now.",
-        "\u26a0\ufe0f <b>BREAKEVEN</b>\n\nHope you banked some on the way up \u2014 nicely done. I'll be looking for the next entry.",
+        "⚠️ <b>BREAKEVEN HIT</b>\n\nFor those who secured profit earlier — congratulations! I'm now looking for new entries.",
+        "⚠️ <b>BACK TO BREAKEVEN</b>\n\nIf you locked in profit, well done! I'm watching for the next setup now.",
+        "⚠️ <b>BREAKEVEN</b>\n\nHope you banked some on the way up — nicely done. I'll be looking for the next entry.",
     ],
 }
 
@@ -103,13 +107,13 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 # Fixed top headings — these NEVER change
 FIXED_HEADING = {
-    20: "\u2705 <b>20 PIPS IN PROFIT</b>",
-    40: "\u2705 <b>40 PIPS IN PROFIT</b>",
-    80: "\u2705 <b>80 PIPS IN PROFIT</b>",
-    100: "\u2705 <b>100 PIPS IN PROFIT</b>",
-    200: "\u2705 <b>TP HIT 200 PIPS</b>",
-    "SL": "\u274c <b>STOP LOSS HIT</b>",
-    "BE": "\u26a0\ufe0f <b>BREAKEVEN HIT</b>",
+    20: "✅ <b>20 PIPS IN PROFIT</b>",
+    40: "✅ <b>40 PIPS IN PROFIT</b>",
+    80: "✅ <b>80 PIPS IN PROFIT</b>",
+    100: "✅ <b>100 PIPS IN PROFIT</b>",
+    200: "✅ <b>TP HIT 200 PIPS</b>",
+    "SL": "❌ <b>STOP LOSS HIT</b>",
+    "BE": "⚠️ <b>BREAKEVEN HIT</b>",
 }
 
 LEVEL_BRIEF = {
@@ -150,12 +154,12 @@ FALLBACK_LINE = {
 
 def _clean_line(text):
     # strip any em/en dashes
-    text = text.replace("\u2014", ",").replace("\u2013", ",").replace(" - ", ", ")
+    text = text.replace("—", ",").replace("–", ",").replace(" - ", ", ")
     # remove a leading bold heading if the model added one
     text = re.sub(r"^\s*<b>.*?</b>\s*", "", text).strip()
     # strip emojis / pictographs
     text = re.sub(
-        "[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF\u2705\u274c\u26a0\ufe0f]",
+        "[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF✅❌⚠️]",
         "", text).strip()
     return text.strip()
 
@@ -181,7 +185,7 @@ def ai_message(level):
                             "You're a real gold/forex trader posting a short, calm update to your followers. "
                             "Write ONE natural line (max ~16 words). Sound like a relaxed human, not hyped, not salesy. "
                             "NO emojis at all. First person 'I' only, never 'we'/'team'/'us'/'group'. "
-                            "ABSOLUTELY NO dashes of any kind (no - no \u2013 no \u2014); use commas or full stops. "
+                            "ABSOLUTELY NO dashes of any kind (no - no – no —); use commas or full stops. "
                             "No heading, no ticks, just the single calm line. Vary it subtly so it isn't identical each time. "
                             "Context: " + brief
                         ),
@@ -200,7 +204,7 @@ def ai_message(level):
             logger.warning(f"Anthropic msg failed: {e}")
 
     if not line:
-        line = random.choice(FALLBACK_LINE.get(level, ["Trade update \U0001f4c8"]))
+        line = random.choice(FALLBACK_LINE.get(level, ["Trade update 📈"]))
 
     return f"{heading}\n\n{line}"
 
@@ -328,8 +332,8 @@ def parse_signal(text):
 
     reasoning = ""
     for line in text.splitlines():
-        if "\U0001f4a1" in line:
-            reasoning = line.replace("\U0001f4a1", "").strip()
+        if "💡" in line:
+            reasoning = line.replace("💡", "").strip()
             break
 
     return {"direction": direction, "pair": pair,
@@ -369,7 +373,7 @@ def reword_reasoning(reasoning, direction):
                         "content": (
                             "Reword this trading note in a natural first-person voice (use 'I', never 'we'/'team'). "
                             "Keep every number and indicator exactly the same. One or two short sentences, no emojis, "
-                            "no preamble \u2014 just the reworded note:\n\n" + reasoning
+                            "no preamble — just the reworded note:\n\n" + reasoning
                         ),
                     }],
                 },
@@ -379,7 +383,7 @@ def reword_reasoning(reasoning, direction):
                 data = r.json()
                 parts = [b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"]
                 out = " ".join(parts).strip()
-                out = out.replace("\u2014", ",").replace("\u2013", ",").replace(" - ", ", ")
+                out = out.replace("—", ",").replace("–", ",").replace(" - ", ", ")
                 if out:
                     return out
             else:
@@ -412,7 +416,7 @@ def ai_entry_line(name, direction, elow, ehigh, tp, sl, dec):
                             "You're a real trader quickly posting a trade to your group on Telegram. "
                             "Write it as ONE short natural message like a human texting, not a formatted card. "
                             "Must include all these numbers exactly: " + facts + ". "
-                            "First person 'I'. No emojis. No dashes (no - no \u2013 no \u2014), use commas. "
+                            "First person 'I'. No emojis. No dashes (no - no – no —), use commas. "
                             "Keep it casual and short, vary the opening (e.g. 'Buying gold now', 'Looking to buy gold here', "
                             "'Getting into gold'). Output only the message."
                         ),
@@ -623,6 +627,103 @@ def monitor_profits():
 threading.Thread(target=monitor_profits, daemon=True).start()
 
 
+# ── SESSION GENERATION ENDPOINTS ─────────────────────
+auth_client_cache = {}  # phone -> TelegramClient instance
+
+
+async def _send_code(phone):
+    """Send code to phone, return phone_hash for verification."""
+    try:
+        tc = TelegramClient(StringSession(), API_ID, API_HASH)
+        await tc.connect()
+        result = await tc.send_code_request(phone)
+        await tc.disconnect()
+        return result.phone_code_hash
+    except Exception as e:
+        logger.error(f"send_code error: {e}")
+        return None
+
+
+async def _verify(phone, code, phone_hash):
+    """Verify code and return SESSION_STRING."""
+    try:
+        tc = TelegramClient(StringSession(), API_ID, API_HASH)
+        await tc.connect()
+        await tc.sign_in(phone, code, phone_code_hash=phone_hash)
+        ss = tc.session.save()
+        await tc.disconnect()
+        return ss
+    except Exception as e:
+        logger.error(f"verify error: {e}")
+        return None
+
+
+@app.route("/send_code", methods=["GET"])
+def send_code_endpoint():
+    """Send code to phone. Usage: /send_code?phone=+447735039230"""
+    try:
+        phone = request.args.get("phone", "").strip()
+        if not phone or not phone.startswith("+"):
+            return jsonify({"error": "phone required, format: +447735039230"}), 400
+
+        fut = asyncio.run_coroutine_threadsafe(_send_code(phone), loop)
+        phone_hash = fut.result(timeout=30)
+
+        if not phone_hash:
+            return jsonify({"error": "Failed to send code. Check phone number."}), 500
+
+        with auth_lock:
+            pending_auth[phone] = {"phone_hash": phone_hash}
+
+        return jsonify({
+            "status": "ok",
+            "message": f"Code sent to {phone}. Now call /verify?phone={phone}&code=XXXXX"
+        }), 200
+
+    except Exception as e:
+        logger.error(f"send_code endpoint error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/verify", methods=["GET"])
+def verify_endpoint():
+    """Verify code and return SESSION_STRING. Usage: /verify?phone=+447735039230&code=12345"""
+    try:
+        phone = request.args.get("phone", "").strip()
+        code = request.args.get("code", "").strip()
+
+        if not phone or not code:
+            return jsonify({"error": "phone and code required"}), 400
+
+        with auth_lock:
+            if phone not in pending_auth:
+                return jsonify({"error": "Phone not found in pending auth. Call /send_code first."}), 400
+            phone_hash = pending_auth[phone].get("phone_hash")
+
+        if not phone_hash:
+            return jsonify({"error": "Invalid auth state. Call /send_code again."}), 400
+
+        fut = asyncio.run_coroutine_threadsafe(_verify(phone, code, phone_hash), loop)
+        session_string = fut.result(timeout=30)
+
+        if not session_string:
+            return jsonify({"error": "Code verification failed. Check code and try again."}), 500
+
+        with auth_lock:
+            pending_auth.pop(phone, None)
+
+        return jsonify({
+            "status": "ok",
+            "phone": phone,
+            "SESSION_STRING": session_string,
+            "note": "Copy this SESSION_STRING to your Railway environment variables as VANTAGE_SESSION_STRING"
+        }), 200
+
+    except Exception as e:
+        logger.error(f"verify endpoint error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 # ── ENDPOINTS ────────────────────────────────────────
 @app.route("/", methods=["GET"])
 def health():
@@ -673,8 +774,8 @@ def test_signal():
         reason = ("Gold is forming a base near the 1H EMA50 at 4065.75 with RSI at 39.4 building. Watch for a break higher."
                   if is_gold else
                   "Bitcoin holding support with momentum building on the 1H. Bias up.")
-        arrow = "\U0001f7e2" if d == "BUY" else "\U0001f534"
-        sample = f"{arrow} {d} {pairname}\nENTRY : {e}\n\U0001f4a1 {reason}"
+        arrow = "🟢" if d == "BUY" else "🔴"
+        sample = f"{arrow} {d} {pairname}\nENTRY : {e}\n💡 {reason}"
         sig = parse_signal(sample)
         if not sig:
             return "Could not parse sample", 500
