@@ -236,29 +236,6 @@ FALLBACK_LINE = {
     ],
 }
 
-ENTRY_FALLBACK = {
-    "BUY": [
-        "Buying gold here {elow} to {ehigh}. TP {tp}, SL {sl}",
-        "In long on gold bro, {elow} to {ehigh}. Target {tp}, stop {sl}",
-        "Getting long gold, entry {elow} to {ehigh}, TP {tp}, SL {sl}",
-        "Taking a buy on gold {elow} to {ehigh}. TP {tp}, SL {sl}",
-        "Long gold from {elow} to {ehigh} bro. Target {tp}, stop at {sl}",
-        "Just gone long gold, {elow} to {ehigh}, TP {tp} and SL {sl}",
-        "Buying this area {elow} to {ehigh}. TP {tp}, SL {sl}",
-        "In on gold long bro, {elow} to {ehigh}, target {tp}, stop {sl}",
-    ],
-    "SELL": [
-        "Selling gold here {elow} to {ehigh}. TP {tp}, SL {sl}",
-        "In short on gold bro, {elow} to {ehigh}. Target {tp}, stop {sl}",
-        "Getting short gold, entry {elow} to {ehigh}, TP {tp}, SL {sl}",
-        "Taking a sell on gold {elow} to {ehigh}. TP {tp}, SL {sl}",
-        "Short gold from {elow} to {ehigh} bro. Target {tp}, stop at {sl}",
-        "Just gone short gold, {elow} to {ehigh}, TP {tp} and SL {sl}",
-        "Selling this area {elow} to {ehigh}. TP {tp}, SL {sl}",
-        "In on gold short bro, {elow} to {ehigh}, target {tp}, stop {sl}",
-    ],
-}
-
 PROMO_MARKERS = ["JOIN", "FREE", "WHATSAPP", "WHATS APP", " DM ", "SUPPORT",
                  "T.ME/", "HTTP", "SUBSCRIBE", "PM NOW", "STRIPE", "VIP",
                  "BONUS", "INSTAGRAM", "FTMO"]
@@ -364,41 +341,86 @@ def alert_message(level):
     return f"{heading}\n\n{line}"
 
 
+ENTRY_OPENERS = {
+    "BUY": [
+        "Buying gold now",
+        "Buying gold here bro",
+        "Taking a buy on gold",
+        "Buying this area on gold",
+        "Gold buy for me here",
+        "Buying gold at this level",
+        "Buy on gold bro",
+        "Buying gold from here",
+        "Getting my buy on gold now",
+        "Buying gold here",
+        "Gold buy taken bro",
+        "Buying into gold now",
+    ],
+    "SELL": [
+        "Selling gold now",
+        "Selling gold here bro",
+        "Taking a sell on gold",
+        "Selling this area on gold",
+        "Gold sell for me here",
+        "Selling gold at this level",
+        "Sell on gold bro",
+        "Selling gold from here",
+        "Getting my sell on gold now",
+        "Selling gold here",
+        "Gold sell taken bro",
+        "Selling into gold now",
+    ],
+}
+
+
 def entry_message(name, direction, elow, ehigh, tp, sl, dec):
-    facts = (f"{'buying' if direction == 'BUY' else 'selling'} {name}, "
-             f"entry {elow:.{dec}f} to {ehigh:.{dec}f}, "
-             f"take profit {tp:.{dec}f}, stop loss {sl:.{dec}f}")
+    """Casual opener, then the levels in a fixed clear block.
 
-    out = _ask_claude(
-        "You are a UK gold trader posting your own trade into your Telegram "
-        "group. Write ONE short message like a human texting a mate, not a "
-        "formatted signal card.\n\n"
-        "Include these numbers exactly, and no other numbers at all: "
-        + facts + ".\n\n"
-        "VOICE: casual, British, first person 'I'. You may say 'bro' but only "
-        "about one time in three and only if it reads naturally. 'bro' is the "
-        "only term of address allowed, never 'mate', 'guys', 'team' or 'fam'. "
-        "Avoid heavy slang like 'innit'. State the levels and nothing more, no "
-        "prediction or opinion about how the trade will go. "
-        "No emojis. No dashes of any kind, use commas. "
-        "Never mention joining, subscribing, links, VIP or any service. "
-        "Vary the opening so it is not identical each time. "
-        "Output only the message."
+    The numbers are never written by the model. It only supplies the
+    opening line, so the direction and levels cannot come out wrong.
+    """
+    opener = _ask_claude(
+        "You are a UK gold trader about to post a trade to your Telegram "
+        "group. Write ONLY the opening line, max 8 words, saying you are "
+        f"{'buying' if direction == 'BUY' else 'selling'} {name}.\n\n"
+        "Casual, British, first person. You may say 'bro' about one time in "
+        "three. No emojis. No dashes. NO NUMBERS AT ALL, the levels come "
+        "after. No prediction about how it will go. Output the line only.",
+        max_tokens=40,
     )
-    if out and _not_a_repeat(out):
-        return out
 
-    pool = ENTRY_FALLBACK[direction]
-    tpl = random.choice(pool)
-    for _ in range(6):
-        if _not_a_repeat(tpl):
-            break
-        tpl = random.choice(pool)
-    line = tpl.format(elow=f"{elow:.{dec}f}", ehigh=f"{ehigh:.{dec}f}",
-                      tp=f"{tp:.{dec}f}", sl=f"{sl:.{dec}f}")
-    if name != "gold":
-        line = line.replace("gold", name)
-    return line
+    # The opener is the ONLY place the direction is stated, so it has to
+    # contain a direction word. Anything vague gets thrown away.
+    required = ("buy", "buying") if direction == "BUY" else ("sell", "selling")
+    wrong = (("sell", "selling", "short") if direction == "BUY"
+             else ("buy", "buying", "long"))
+
+    def _opener_ok(text):
+        if not text or len(text) > 70:
+            return False
+        if any(ch.isdigit() for ch in text):
+            return False
+        low = text.lower()
+        if any(w in low for w in wrong):
+            return False
+        return any(w in low for w in required)
+
+    if _opener_ok(opener) and not _not_a_repeat(opener):
+        opener = None
+    if not _opener_ok(opener):
+        pool = ENTRY_OPENERS[direction]
+        opener = random.choice(pool)
+        for _ in range(6):
+            if _not_a_repeat(opener):
+                break
+            opener = random.choice(pool)
+
+    return (
+        f"<b>{opener}</b>\n\n"
+        f"Entry: {elow:.{dec}f} to {ehigh:.{dec}f}\n"
+        f"\u2705 TP: {tp:.{dec}f}\n"
+        f"\U0001F6AB SL: {sl:.{dec}f}"
+    )
 
 
 # ══════════════════════════════════════════════════════
