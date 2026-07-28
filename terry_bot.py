@@ -55,6 +55,12 @@ ALERT_LEVELS = [20, 60, 100, 200]   # 200 = TP hit, closes the trade
 
 TRADE_EXPIRY_SECONDS = 10800        # auto clear after 3h with no result
 
+# Terry posts a few minutes after the signal, at whatever the price is then.
+# The entry differs from the other account because he genuinely entered later,
+# not because the numbers were nudged. Set ENTRY_DELAY_MIN/MAX to 0 to disable.
+ENTRY_DELAY_MIN = int(os.environ.get("ENTRY_DELAY_MIN", "120"))
+ENTRY_DELAY_MAX = int(os.environ.get("ENTRY_DELAY_MAX", "420"))
+
 # ══════════════════════════════════════════════════════
 # STATE
 # ══════════════════════════════════════════════════════
@@ -727,6 +733,52 @@ async def open_trade_from_signal(sig):
     return tid
 
 
+# Signals waiting out their delay, so we do not take two at once
+pending_entries = set()
+pending_lock = threading.Lock()
+
+
+def schedule_delayed_entry(pair, direction):
+    """Wait a few minutes, then open at whatever the price is by then."""
+    delay = random.randint(min(ENTRY_DELAY_MIN, ENTRY_DELAY_MAX),
+                           max(ENTRY_DELAY_MIN, ENTRY_DELAY_MAX))
+
+    def _run():
+        try:
+            logger.info(f"{pair} {direction} queued, entering in {delay}s")
+            time.sleep(delay)
+
+            price = get_price(pair)
+            if not price:
+                logger.error(f"No price after delay, dropping {pair} {direction}")
+                return
+
+            with trade_lock:
+                if any(t["pair"] == pair and t["status"] == "open"
+                       for t in active_trades.values()):
+                    logger.info(f"{pair} already open after delay, skipping")
+                    return
+
+            sig = {"pair": pair, "direction": direction, "entry": round(price, 2)}
+            asyncio.run_coroutine_threadsafe(
+                open_trade_from_signal(sig), loop).result(timeout=40)
+            logger.info(f"Delayed entry taken on {pair} at {price}")
+        except Exception as e:
+            logger.error(f"Delayed entry failed: {e}")
+        finally:
+            with pending_lock:
+                pending_entries.discard(pair)
+
+    with pending_lock:
+        if pair in pending_entries:
+            logger.info(f"{pair} already queued, ignoring duplicate signal")
+            return False
+        pending_entries.add(pair)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return True
+
+
 async def handle_source_message(text):
     try:
         last_channel_msgs.append({"ts": time.time(), "text": (text or "")[:400]})
@@ -749,7 +801,10 @@ async def handle_source_message(text):
         if already:
             logger.info(f"Ignored, {sig['pair']} trade already open")
             return
-        await open_trade_from_signal(sig)
+        if ENTRY_DELAY_MAX > 0:
+            schedule_delayed_entry(sig["pair"], sig["direction"])
+        else:
+            await open_trade_from_signal(sig)
     else:
         logger.info("Ignored non actionable message")
 
@@ -941,6 +996,9 @@ def health():
         f"Target group: {TARGET_GROUP_ID or 'NOT SET'}\n"
         f"LIVE_MODE variable: {'true' if LIVE_MODE else 'false'}\n"
         f"Signal input: {'channel listener' if SOURCE_CHANNEL_ID else 'webhook only (/webhook)'}\n"
+        f"Entry delay: "
+        f"{f'{ENTRY_DELAY_MIN}-{ENTRY_DELAY_MAX}s, re-priced at entry' if ENTRY_DELAY_MAX > 0 else 'none, instant'}\n"
+        f"Queued right now: {len(pending_entries) or 'none'}\n"
         f"Alerts at: {ALERT_LEVELS} pips\n"
         f"TP {TP_POINTS} points ({int(TP_POINTS * 10)} pips), "
         f"SL {SL_POINTS} points ({int(SL_POINTS * 10)} pips)\n"
@@ -971,11 +1029,21 @@ def webhook():
                    for t in active_trades.values()):
                 return jsonify({"status": "ignored", "reason": "trade already open"}), 200
 
-        sig = {"pair": pair, "direction": direction, "entry": price}
-        fut = asyncio.run_coroutine_threadsafe(open_trade_from_signal(sig), loop)
-        tid = fut.result(timeout=30)
+        # No delay configured: take it straight away at the signal price
+        if ENTRY_DELAY_MAX <= 0:
+            sig = {"pair": pair, "direction": direction, "entry": price}
+            tid = asyncio.run_coroutine_threadsafe(
+                open_trade_from_signal(sig), loop).result(timeout=30)
+            return jsonify({"status": "ok", "trade_id": tid}), 200
 
-        return jsonify({"status": "ok", "trade_id": tid}), 200
+        queued = schedule_delayed_entry(pair, direction)
+        if not queued:
+            return jsonify({"status": "ignored",
+                            "reason": "already queued"}), 200
+        return jsonify({"status": "queued",
+                        "note": f"entering in {ENTRY_DELAY_MIN}-{ENTRY_DELAY_MAX}s "
+                                f"at the live price then",
+                        "signal_price": price}), 200
 
     except Exception as e:
         logger.error(f"Webhook error: {e}")
