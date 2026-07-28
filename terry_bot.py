@@ -1154,6 +1154,68 @@ def test_signal():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/simulate", methods=["GET"])
+def simulate():
+    """Post a whole trade the way it will actually look, threaded.
+    /simulate?outcome=win   entry, 20, 60, 100, 200
+    /simulate?outcome=sl    entry, 20, stop loss
+    /simulate?outcome=be    entry, 20, 60, back to entry
+    Optional &dir=SELL &entry=4021.00 &gap=4  (seconds between messages)
+    Does not create a tracked trade and does not touch the price feeds.
+    """
+    outcome = request.args.get("outcome", "win").lower()
+    direction = request.args.get("dir", "BUY").upper()
+    gap = max(1, min(int(request.args.get("gap", "4")), 30))
+
+    entry = request.args.get("entry")
+    if entry:
+        base = float(entry)
+    else:
+        base = get_price("XAUUSD") or 4021.00
+
+    sequences = {
+        "win": [20, 60, 100, 200],
+        "sl": [20, "SL"],
+        "be": [20, 60, "BE"],
+    }
+    if outcome not in sequences:
+        return "Use ?outcome=win or ?outcome=sl or ?outcome=be", 400
+
+    post, trade = build_trade({"pair": "XAUUSD",
+                               "direction": direction,
+                               "entry": round(base, 2)})
+
+    def _run():
+        try:
+            fut = asyncio.run_coroutine_threadsafe(send_to_telegram(post), loop)
+            root_id = fut.result(timeout=25)
+            if root_id is None:
+                logger.error("Simulation entry failed to send")
+                return
+            for step in sequences[outcome]:
+                time.sleep(gap)
+                asyncio.run_coroutine_threadsafe(
+                    send_to_telegram(alert_message(step), reply_to_id=root_id),
+                    loop).result(timeout=25)
+            logger.info(f"Simulation '{outcome}' finished")
+        except Exception as e:
+            logger.error(f"Simulation error: {e}")
+
+    threading.Thread(target=_run, daemon=True).start()
+
+    dest = "Saved Messages" if SEND_TO_SAVED else "THE LIVE GROUP"
+    steps = " then ".join(str(x) for x in sequences[outcome])
+    total = gap * len(sequences[outcome])
+    return (f"Simulating a '{outcome}' trade into {dest}.\n\n"
+            f"{direction} gold, signal price {base:.2f}\n"
+            f"entry band {min(trade['profit_anchor'], base):.2f} to "
+            f"{max(trade['profit_anchor'], base):.2f}\n"
+            f"tp {trade['tp']:.2f}  sl {trade['sl']:.2f}\n\n"
+            f"Entry posts now, then {steps}, {gap}s apart.\n"
+            f"All replies thread under the entry. Done in about {total}s.\n\n"
+            f"Try the others: /simulate?outcome=sl  /simulate?outcome=be"), 200
+
+
 @app.route("/test/<level>", methods=["GET"])
 def test_level(level):
     mapping = {"20": 20, "60": 60, "100": 100, "200": 200,
