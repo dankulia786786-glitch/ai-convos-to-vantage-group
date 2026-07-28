@@ -30,7 +30,9 @@ TARGET_TOPIC_ID = int(os.environ.get("TARGET_TOPIC_ID", "0"))
 SOURCE_CHANNEL_ID = int(os.environ.get("SOURCE_CHANNEL_ID", "0"))
 OANDA_API_KEY = os.environ.get("OANDA_API_KEY", "")
 OANDA_ACCOUNT = os.environ.get("OANDA_ACCOUNT", "001-011-8842842-001")
+OANDA_HOST = os.environ.get("OANDA_HOST", "https://api-fxpractice.oanda.com")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+TWELVE_DATA_KEY = os.environ.get("TWELVE_DATA_KEY", "")
 
 # Test mode: True = Saved Messages, False = live group. Flip with /switch_mode
 SEND_TO_SAVED = True
@@ -124,9 +126,10 @@ LEVEL_BRIEF = {
           "you are pleased with the move."),
     "SL": ("the stop was hit and the trade is closed. Stay calm and matter of "
            "fact, say you are looking at the next setup."),
-    "BE": ("price drifted back to the entry level after being onside. Say "
-           "anyone who moved their stop to entry is out at nothing, and you "
-           "are watching for the next one."),
+    "BE": ("price drifted back to the entry level after being onside. Make it "
+           "clearly POSITIVE for anyone who moved their stop to entry earlier, "
+           "they are out at zero with nothing lost. Never imply anyone got "
+           "caught out or lost anything. Say you are watching for the next one."),
 }
 
 FALLBACK_LINE = {
@@ -321,8 +324,10 @@ def alert_message(level):
             "Telegram group. Write ONE line, max 18 words.\n\n"
             "VOICE: relaxed, casual, like texting a mate. British, not American. "
             "Say 'bro' sometimes, roughly one message in three, and only where it "
-            "lands naturally. Never force it. Never say 'guys', 'team', 'fam' or "
-            "'everyone'. Use 'I' for yourself and 'you' when talking to them.\n\n"
+            "lands naturally. Never force it. 'bro' is the ONLY term of address "
+            "allowed, never 'mate', 'guys', 'team', 'fam', 'lads' or 'everyone'. "
+            "Avoid heavy slang like 'innit' or 'proper'. "
+            "Use 'I' for yourself and 'you' when talking to them.\n\n"
             "HARD RULES, breaking any of these makes the message unusable:\n"
             "- Never claim a specific action you took with your position. No "
             "'closed half', 'took partials', 'locked in half', 'banked some'. "
@@ -365,8 +370,11 @@ def entry_message(name, direction, elow, ehigh, tp, sl, dec):
         "Include these numbers exactly, and no other numbers at all: "
         + facts + ".\n\n"
         "VOICE: casual, British, first person 'I'. You may say 'bro' but only "
-        "about one time in three and only if it reads naturally. Never 'guys', "
-        "'team' or 'fam'. No emojis. No dashes of any kind, use commas. "
+        "about one time in three and only if it reads naturally. 'bro' is the "
+        "only term of address allowed, never 'mate', 'guys', 'team' or 'fam'. "
+        "Avoid heavy slang like 'innit'. State the levels and nothing more, no "
+        "prediction or opinion about how the trade will go. "
+        "No emojis. No dashes of any kind, use commas. "
         "Never mention joining, subscribing, links, VIP or any service. "
         "Vary the opening so it is not identical each time. "
         "Output only the message."
@@ -472,7 +480,7 @@ def get_oanda_price(pair):
         return None
     try:
         instrument = "XAU_USD" if pair == "XAUUSD" else "BTC_USD"
-        url = f"https://api-fxpractice.oanda.com/v3/accounts/{OANDA_ACCOUNT}/pricing"
+        url = f"{OANDA_HOST}/v3/accounts/{OANDA_ACCOUNT}/pricing"
         r = requests.get(url,
                          params={"instruments": instrument},
                          headers={"Authorization": f"Bearer {OANDA_API_KEY}"},
@@ -486,12 +494,55 @@ def get_oanda_price(pair):
     return None
 
 
+def get_goldapi_price(pair):
+    """Free keyless spot feed. Backup only, gold and bitcoin."""
+    try:
+        if pair == "XAUUSD":
+            r = requests.get("https://api.gold-api.com/price/XAU", timeout=6)
+            if r.status_code == 200:
+                p = float(r.json().get("price", 0))
+                if p > 1000:
+                    return p
+        else:
+            r = requests.get(
+                "https://api.binance.com/api/v3/ticker/price",
+                params={"symbol": "BTCUSDT"}, timeout=6)
+            if r.status_code == 200:
+                p = float(r.json()["price"])
+                if p > 0:
+                    return p
+    except Exception as e:
+        logger.warning(f"Backup price failed: {e}")
+    return None
+
+
+def get_twelvedata_price(pair):
+    """Twelve Data spot price. You already have a key from the Kevin bot."""
+    if not TWELVE_DATA_KEY:
+        return None
+    try:
+        symbol = "XAU/USD" if pair == "XAUUSD" else "BTC/USD"
+        r = requests.get("https://api.twelvedata.com/price",
+                         params={"symbol": symbol, "apikey": TWELVE_DATA_KEY},
+                         timeout=6)
+        if r.status_code == 200:
+            p = float(r.json().get("price", 0))
+            if p > 0:
+                return p
+        logger.warning(f"TwelveData {r.status_code}: {r.text[:120]}")
+    except Exception as e:
+        logger.warning(f"TwelveData failed: {e}")
+    return None
+
+
 def get_price(pair):
-    """MT5 feed when it is fresh, OANDA otherwise."""
+    """MT5 first (your real broker), then OANDA, Twelve Data, free feed."""
     if (mt5_prices.get(pair) is not None
             and (time.time() - mt5_prices["ts"]) <= MT5_FRESH_SECONDS):
         return mt5_prices[pair]
-    return get_oanda_price(pair)
+    return (get_oanda_price(pair)
+            or get_twelvedata_price(pair)
+            or get_goldapi_price(pair))
 
 
 def pips_in_profit(pair, direction, anchor, current):
@@ -762,7 +813,10 @@ def health():
         f"Mode: {mode}\n"
         f"Active trades: {active}\n"
         f"Client: {'connected' if client else 'disconnected'}\n"
-        f"OANDA: {'set' if OANDA_API_KEY else 'no key'}\n"
+        f"Price feeds: MT5 {'yes' if mt5_prices['ts'] else 'not reporting'}, "
+        f"OANDA {'key set' if OANDA_API_KEY else 'no key'}, "
+        f"TwelveData {'key set' if TWELVE_DATA_KEY else 'no key'}, "
+        f"free feed always on\n"
         f"Claude wording: {'on' if ANTHROPIC_API_KEY else 'off, using fallbacks'}\n"
         f"Source channel: {SOURCE_CHANNEL_ID or 'not set, webhook only'}\n"
         f"Target group: {TARGET_GROUP_ID or 'not set'}\n"
@@ -836,12 +890,101 @@ def price_check():
     lines.append(f"MT5 feed: {mt5_val if mt5_val is not None else 'none yet'}"
                  + (f"  ({age:.0f}s ago, {'fresh' if fresh else 'stale'})"
                     if age is not None else ""))
-    lines.append(f"OANDA: {oanda if oanda is not None else 'none'}")
-    if mt5_val is not None and oanda is not None:
-        lines.append(f"Difference: {abs(mt5_val - oanda):.2f} "
-                     f"({abs(mt5_val - oanda) / PIP_SIZE.get(pair, 0.1):.0f} pips)")
-    lines.append(f"Bot will use: {'MT5' if fresh else 'OANDA'}")
+    lines.append(f"OANDA:        {oanda if oanda is not None else 'none'}")
+    td = get_twelvedata_price(pair)
+    lines.append(f"Twelve Data:  {td if td is not None else 'none'}")
+    backup = get_goldapi_price(pair)
+    lines.append(f"Free feed:    {backup if backup is not None else 'none'}")
+    lines.append("")
+
+    size = PIP_SIZE.get(pair, 0.1)
+    ref = mt5_val if mt5_val is not None else (oanda or td or backup)
+    if ref:
+        for label, val in [("OANDA", oanda), ("Twelve Data", td), ("Free feed", backup)]:
+            if val is not None and ref != val:
+                lines.append(f"{label} vs "
+                             f"{'MT5' if mt5_val is not None else 'reference'}: "
+                             f"{abs(val - ref):.2f} ({abs(val - ref) / size:.0f} pips)")
+        lines.append("")
+
+    if fresh:
+        using = "MT5 (your broker, most accurate)"
+    elif oanda:
+        using = "OANDA"
+    elif td:
+        using = "Twelve Data"
+    elif backup:
+        using = "free feed"
+    else:
+        using = "NOTHING"
+    lines.append(f"Bot will use: {using}")
+
+    if using == "NOTHING":
+        lines.append("")
+        lines.append("No feed at all. The bot CANNOT fire alerts. Run /diag_price")
+    elif not fresh:
+        lines.append("")
+        lines.append("MT5 not reporting. Point your PriceFeed EA at this service")
+        lines.append("for prices that match your own broker exactly.")
     return "\n".join(lines), 200
+
+
+@app.route("/diag_price", methods=["GET"])
+def diag_price():
+    """Why is there no price? Tries both OANDA hosts and lists your accounts."""
+    out = []
+    if not OANDA_API_KEY:
+        return "OANDA_API_KEY is not set on this service.", 200
+
+    out.append(f"Key ends: ...{OANDA_API_KEY[-6:]}")
+    out.append(f"Account configured: {OANDA_ACCOUNT}")
+    out.append("")
+
+    hosts = [
+        ("practice", "https://api-fxpractice.oanda.com"),
+        ("live", "https://api-fxtrade.oanda.com"),
+    ]
+
+    for label, host in hosts:
+        out.append(f"--- {label} ({host}) ---")
+
+        # 1. Does the token work on this host at all?
+        try:
+            r = requests.get(f"{host}/v3/accounts",
+                             headers={"Authorization": f"Bearer {OANDA_API_KEY}"},
+                             timeout=10)
+            out.append(f"list accounts: HTTP {r.status_code}")
+            if r.status_code == 200:
+                accts = [a.get("id") for a in r.json().get("accounts", [])]
+                out.append(f"accounts on this key: {accts if accts else 'none'}")
+                for acct in accts:
+                    try:
+                        pr = requests.get(
+                            f"{host}/v3/accounts/{acct}/pricing",
+                            params={"instruments": "XAU_USD"},
+                            headers={"Authorization": f"Bearer {OANDA_API_KEY}"},
+                            timeout=10)
+                        if pr.status_code == 200:
+                            px = pr.json()["prices"][0]
+                            bid = float(px["bids"][0]["price"])
+                            ask = float(px["asks"][0]["price"])
+                            out.append(f"  {acct} XAU_USD mid: "
+                                       f"{(bid + ask) / 2:.2f}  "
+                                       f"(bid {bid:.2f} / ask {ask:.2f})")
+                        else:
+                            out.append(f"  {acct} pricing: HTTP {pr.status_code} "
+                                       f"{pr.text[:120]}")
+                    except Exception as e:
+                        out.append(f"  {acct} pricing failed: {e}")
+            else:
+                out.append(f"body: {r.text[:200]}")
+        except Exception as e:
+            out.append(f"request failed: {e}")
+        out.append("")
+
+    out.append("If a mid price shows above, copy that host's account id into the")
+    out.append("OANDA_ACCOUNT variable, and tell me which host it was on.")
+    return "\n".join(out), 200
 
 
 @app.route("/status", methods=["GET"])
