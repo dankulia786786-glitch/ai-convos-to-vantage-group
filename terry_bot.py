@@ -34,8 +34,11 @@ OANDA_HOST = os.environ.get("OANDA_HOST", "https://api-fxpractice.oanda.com")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TWELVE_DATA_KEY = os.environ.get("TWELVE_DATA_KEY", "")
 
-# Test mode: True = Saved Messages, False = live group. Flip with /switch_mode
-SEND_TO_SAVED = True
+# Test mode. Set LIVE_MODE=true in Railway variables to go live permanently.
+# /switch_mode still flips it for this session, but a restart falls back to
+# whatever LIVE_MODE says, so the bot cannot silently drop out of live mode.
+LIVE_MODE = os.environ.get("LIVE_MODE", "false").strip().lower() in ("1", "true", "yes")
+SEND_TO_SAVED = not LIVE_MODE
 
 # ══════════════════════════════════════════════════════
 # TRADE MATHS
@@ -934,8 +937,10 @@ def health():
         f"free feed always on\n"
         f"TD confirmations used today: {td_budget['used_today']}/{TD_DAILY_CAP}\n"
         f"Claude wording: {'on' if ANTHROPIC_API_KEY else 'off, using fallbacks'}\n"
-        f"Source channel: {SOURCE_CHANNEL_ID or 'not set, webhook only'}\n"
-        f"Target group: {TARGET_GROUP_ID or 'not set'}\n"
+        f"Source channel: {SOURCE_CHANNEL_ID or 'not set'}\n"
+        f"Target group: {TARGET_GROUP_ID or 'NOT SET'}\n"
+        f"LIVE_MODE variable: {'true' if LIVE_MODE else 'false'}\n"
+        f"Signal input: {'channel listener' if SOURCE_CHANNEL_ID else 'webhook only (/webhook)'}\n"
         f"Alerts at: {ALERT_LEVELS} pips\n"
         f"TP {TP_POINTS} points ({int(TP_POINTS * 10)} pips), "
         f"SL {SL_POINTS} points ({int(SL_POINTS * 10)} pips)\n"
@@ -1135,8 +1140,16 @@ def status():
 @app.route("/switch_mode", methods=["GET"])
 def switch_mode():
     global SEND_TO_SAVED
+    if SEND_TO_SAVED and not TARGET_GROUP_ID:
+        return ("Cannot go live: TARGET_GROUP_ID is not set.\n"
+                "Add it in Railway variables first."), 400
     SEND_TO_SAVED = not SEND_TO_SAVED
-    return f"Now sending to {'SAVED MESSAGES' if SEND_TO_SAVED else 'LIVE GROUP'}", 200
+    note = ""
+    if not SEND_TO_SAVED and not LIVE_MODE:
+        note = ("\n\nWARNING: this only lasts until the next restart. "
+                "Set LIVE_MODE=true in Railway to make it stick.")
+    return (f"Now sending to "
+            f"{'SAVED MESSAGES' if SEND_TO_SAVED else 'THE LIVE GROUP'}{note}"), 200
 
 
 @app.route("/reset", methods=["GET"])
