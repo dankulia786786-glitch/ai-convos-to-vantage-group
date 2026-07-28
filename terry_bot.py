@@ -1219,6 +1219,85 @@ def price_check():
     return "\n".join(lines), 200
 
 
+@app.route("/diag_send", methods=["GET"])
+def diag_send():
+    """Why did the send fail? Checks the account, the group and the topic."""
+    out = []
+
+    async def _check():
+        if not client:
+            out.append("No Telegram client at all.")
+            return
+        try:
+            if not await client.is_user_authorized():
+                out.append("Session is not authorized. Regenerate it.")
+                return
+            me = await client.get_me()
+            out.append(f"Logged in as: {me.first_name} (@{me.username}) id {me.id}")
+        except Exception as e:
+            out.append(f"Could not read account: {e}")
+            return
+
+        out.append(f"TARGET_GROUP_ID: {TARGET_GROUP_ID}")
+        out.append(f"TARGET_TOPIC_ID: {TARGET_TOPIC_ID or 'not set'}")
+        out.append("")
+
+        # 1. Can we even see the group?
+        try:
+            ent = await client.get_entity(TARGET_GROUP_ID)
+            title = getattr(ent, "title", "?")
+            is_forum = getattr(ent, "forum", False)
+            out.append(f"Group resolved OK: {title}")
+            out.append(f"Is a forum (uses topics): {is_forum}")
+            if TARGET_TOPIC_ID and not is_forum:
+                out.append("  >> TARGET_TOPIC_ID is set but this group has no "
+                           "topics. That alone will fail every send.")
+            if is_forum and not TARGET_TOPIC_ID:
+                out.append("  >> This group uses topics but TARGET_TOPIC_ID "
+                           "is not set.")
+        except Exception as e:
+            out.append(f"CANNOT RESOLVE GROUP: {e}")
+            out.append("  >> Usually means this account is not a member, or "
+                       "the id is wrong. Terry must join the group first.")
+            return
+
+        out.append("")
+
+        # 2. Try to send, plain first, then with the topic
+        try:
+            m = await client.send_message(ent, "test", parse_mode="html")
+            out.append(f"Plain send: OK (message id {m.id})")
+            try:
+                await client.delete_messages(ent, [m.id])
+                out.append("  deleted the test message")
+            except Exception:
+                out.append("  could not delete it, remove it by hand")
+        except Exception as e:
+            out.append(f"Plain send FAILED: {type(e).__name__}: {e}")
+
+        if TARGET_TOPIC_ID:
+            try:
+                m = await client.send_message(ent, "test", parse_mode="html",
+                                              reply_to=TARGET_TOPIC_ID)
+                out.append(f"Topic send: OK (message id {m.id})")
+                try:
+                    await client.delete_messages(ent, [m.id])
+                    out.append("  deleted the test message")
+                except Exception:
+                    pass
+            except Exception as e:
+                out.append(f"Topic send FAILED: {type(e).__name__}: {e}")
+                out.append("  >> If the plain send worked and this did not, "
+                           "clear TARGET_TOPIC_ID and try again.")
+
+    try:
+        asyncio.run_coroutine_threadsafe(_check(), loop).result(timeout=45)
+    except Exception as e:
+        out.append(f"Diagnostic itself failed: {e}")
+
+    return "\n".join(out), 200
+
+
 @app.route("/diag_price", methods=["GET"])
 def diag_price():
     """Why is there no price? Tries both OANDA hosts and lists your accounts."""
