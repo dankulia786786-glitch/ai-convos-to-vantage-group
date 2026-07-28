@@ -116,124 +116,123 @@ HEADINGS = {
 }
 
 LEVEL_BRIEF = {
-    20: ("price has moved 20 pips your way. Suggest they can shift their stop "
-         "to entry now so the trade costs them nothing if it turns."),
-    60: ("price is now 60 pips onside and still moving. Say it is going well "
-         "and they can trail their stop up behind it if they want."),
-    100: ("price is 100 pips onside, halfway to the target. Say it is running "
-          "well and their stop can sit safely in profit now."),
-    200: ("price reached the full 200 pip target. Say the target is done and "
-          "you are pleased with the move."),
-    "SL": ("the stop was hit and the trade is closed. Stay calm and matter of "
-           "fact, say you are looking at the next setup."),
-    "BE": ("price drifted back to the entry level after being onside. Make it "
-           "clearly POSITIVE for anyone who moved their stop to entry earlier, "
-           "they are out at zero with nothing lost. Never imply anyone got "
-           "caught out or lost anything. Say you are watching for the next one."),
+    20: ("price is 20 pips your way. You are just talking to the group about "
+         "it. Say you are holding, or thinking about the stop, and see where "
+         "it goes. Casual thinking out loud, not instructions."),
+    60: ("price is 60 pips your way and still moving. Just talking about it. "
+         "Say it is going well and you are staying in, or watching it."),
+    100: ("price is 100 pips your way, halfway to your target. Just talking "
+          "about it. Sound pleased and say you are letting it run on."),
+    200: ("price hit your 200 pip target. You are closing it. Sound pleased "
+          "but normal about it, like a good day at work, not a celebration."),
+    "SL": ("your stop got hit. Take it on the chin, no excuses, say you will "
+           "get it back on the next one. Short and unbothered."),
+    "BE": ("price came back to your entry so you are out at nothing. Shrug it "
+           "off, nothing lost, you are looking for the next one."),
 }
 
 FALLBACK_LINE = {
     20: [
-        "20 pips onside already, shift your stop to entry and it costs you nothing",
-        "Nice start bro, get your stop to entry and ride it for free",
-        "20 up. Move your stop to entry and you cannot lose on it now",
-        "Off to a decent start, stop to entry and let it breathe",
-        "That is 20 for you bro, worth getting the stop up to entry",
-        "Moving my stop to entry here, nothing to lose from this point",
-        "20 pips in. Stop to entry and enjoy the rest of it",
-        "Good early move, I would get that stop up to entry",
-        "20 onside bro. Risk free from here if you move the stop",
-        "Straight into profit, stop goes to entry for me",
-        "20 up already, tidy start to this one",
-        "Stop is at entry for me now, 20 pips onside",
-        "Decent start bro, no reason to risk anything on it now",
-        "20 pips your way. Get the stop to entry and relax",
-        "Moved my stop up, 20 in the bag so far",
+        "20 pips bro, holding this one, lets see where it goes",
+        "20 up already, happy with that start",
+        "20 pips in, staying in this for now",
+        "Nice, 20 up bro, letting it breathe a bit",
+        "20 pips your way, moving my stop to entry",
+        "20 in profit, going nowhere yet, holding",
+        "20 up bro, sitting tight on this one",
+        "That is 20, stop coming to entry for me",
+        "20 pips, decent start, see what it does now",
+        "20 onside, holding, no rush here",
+        "20 up bro, this one looks like it wants more",
+        "20 in, tucking my stop up to entry",
+        "20 pips your way, staying with it",
+        "20 up, quietly happy with this so far",
+        "20 in profit bro, letting it run a bit",
     ],
     60: [
-        "60 pips onside now, trail that stop up behind it",
-        "Running well bro, worth pulling your stop up as it goes",
-        "60 up. Stop can sit in profit from here comfortably",
-        "Nice run this one, trailing my stop behind the move",
-        "60 pips your way bro, no reason to give any of it back",
-        "Good move so far, get that stop trailing up",
-        "60 onside. I am trailing mine, you do what suits you",
-        "Momentum is with us, 60 up and still going",
-        "60 pips in bro. Trail the stop and let it work",
-        "Comfortable 60 onside now, protect it as it moves",
-        "That is 60 for you, still plenty of room to target",
-        "Trailing my stop up here, 60 onside and climbing",
-        "60 up bro, this one is behaving itself nicely",
-        "Solid 60 pips, stop is well clear of trouble now",
-        "60 onside and holding, happy with this",
+        "60 up now bro, happy to sit in this a bit longer",
+        "60 pips, going well, still holding",
+        "60 in profit, letting this one work",
+        "60 up bro, nice and steady this",
+        "60 pips your way, staying in",
+        "60 onside, still plenty in it I reckon",
+        "60 up, trailing my stop behind it now",
+        "60 pips bro, this one is moving well",
+        "60 in, comfortable holding this",
+        "60 up now, letting it push on",
+        "60 pips, no reason to touch it yet",
+        "60 onside bro, happy with how this is going",
+        "60 in profit, still in, still watching",
+        "60 up, pulling my stop up a bit",
+        "60 pips bro, sitting in this one",
     ],
     100: [
-        "100 pips onside, halfway to target and running clean",
-        "100 up bro, stop can sit well in profit now",
-        "Halfway there, 100 onside and still pushing",
-        "100 pips your way, this is behaving exactly as I wanted",
-        "That is 100 bro. Halfway to target with room left",
-        "Trailing my stop again here, 100 onside",
-        "100 up and moving, target is well within reach",
-        "Halfway to the target now, 100 pips clear",
-        "100 pips onside bro, keep that stop moving with it",
-        "Clean 100 up, letting this one run to target",
-        "100 onside. Stop is deep in profit, nothing to worry about",
-        "Halfway home bro, 100 pips and holding strong",
-        "100 up. This is the sort of run you wait for",
-        "Nicely onside now at 100, target next",
-        "100 pips in profit, still plenty in this move",
+        "100 up bro, halfway to target, letting it run",
+        "100 pips in, going nicely this one",
+        "100 onside, still holding, plenty left in it",
+        "100 up bro, happy with this",
+        "100 pips, halfway there, staying in",
+        "100 in profit, letting it push on to target",
+        "100 up, this one is doing exactly what I wanted",
+        "100 pips bro, still riding it",
+        "100 onside, stop is well in profit now",
+        "100 up, halfway home, holding",
+        "100 pips in bro, letting it keep going",
+        "100 onside, no reason to get out yet",
+        "100 up, moving well this, staying with it",
+        "100 pips bro, target is in sight",
+        "100 in, quietly buzzing with this one",
     ],
     200: [
-        "Target done, full 200 pips, very happy with that one",
-        "200 pips bro, target reached and closed out",
-        "That is the full 200, exactly where I wanted it",
-        "Target hit at 200 pips, clean run from start to finish",
-        "200 done bro. Textbook move that one",
-        "Full target reached, 200 pips, on to the next",
-        "200 pips banked, that is the trade done",
-        "Target smashed at 200, pleased with how that ran",
-        "That is 200 bro, closing this one out here",
-        "Full 200 pips, exactly to target, happy days",
-        "Target reached. 200 pips and this one is finished",
-        "200 onside and target done, cannot ask for more",
-        "Closed at target bro, full 200 pips on it",
-        "That is the 200 done, clean trade all the way",
-        "Target hit, 200 pips secured, that is that one wrapped",
+        "200 pips bro, target hit, closing it here",
+        "Target done, 200 pips, happy with that",
+        "200 up, thats the target, out on this one",
+        "200 pips bro, closed it, good trade",
+        "Target reached, 200 pips, taking it",
+        "200 in, thats me out, decent one that",
+        "200 pips, done and dusted bro",
+        "Target hit at 200, closing it out",
+        "200 up, exactly where I wanted it, out",
+        "Thats 200 bro, closed, on to the next",
+        "200 pips, target done, pleased with that",
+        "Closed at 200, cannot complain with that one",
+        "200 in profit, taking it, good move that",
+        "Target smashed bro, 200 pips, out",
+        "200 pips and done, tidy trade",
     ],
     "SL": [
-        "Stopped out on this one, on to the next setup",
-        "Not this time bro, already looking at the next one",
-        "Took the stop, happens, next one is out there",
-        "That one did not work, watching for the next entry",
-        "Stopped out bro, no drama, plenty more coming",
-        "Did not go my way this time, back to the charts",
-        "Stop hit. Part of it, on to the next",
-        "Wrong side of that one bro, next setup is coming",
-        "Took the loss, moving on, I will find the next",
-        "Stopped out. Nothing to dwell on, next one",
-        "That one got me bro, already hunting the next",
-        "Loss on this one, it happens, staying patient",
-        "Stop taken, market had other ideas, next up",
-        "Not our one bro, watching for a fresh setup",
-        "Stopped. On to the next, no point overthinking it",
+        "Stop got me on that one bro, get it back on the next",
+        "Stopped out, no dramas, next one",
+        "That one got me, moving on",
+        "Stop hit bro, it happens, I will recover it",
+        "Stopped out on this, back at it shortly",
+        "Took the stop, no excuses, next setup",
+        "That did not work bro, onto the next",
+        "Stop got hit, I will get it back",
+        "Stopped out, part of the game, moving on",
+        "Lost that one bro, no worries",
+        "Stop taken, back on the charts",
+        "That one beat me, I will have the next",
+        "Stopped out bro, not fussed, next one",
+        "Took a stop there, all good, moving on",
+        "Stop hit, on to the next one",
     ],
     "BE": [
-        "Back to entry. Anyone who moved their stop is out at nothing",
-        "Came back to entry bro, no harm done if your stop was there",
-        "Drifted back to entry, that is why the stop goes up early",
-        "Back at entry level. Out at nothing, watching for the next",
-        "Returned to entry bro, no loss if you moved your stop",
-        "Back to where it started, nothing lost, next one coming",
-        "Entry level again. That stop move earlier paid off",
-        "Came all the way back bro, out flat, on to the next",
-        "Back to entry, no damage, looking for a fresh setup",
-        "Right back to entry. Out at breakeven, no complaints",
-        "Drifted back bro, glad the stop was at entry",
-        "Entry hit again, flat on it, watching the charts",
-        "Back to breakeven, nothing gained nothing lost",
-        "Came back to entry bro, that is the game sometimes",
-        "Out at entry. Next setup is what matters now",
+        "Back to entry, out at nothing, no harm done",
+        "Came back to my entry bro, out flat",
+        "Back to breakeven, nothing lost, next one",
+        "Out at entry on this, no damage",
+        "Came all the way back, out at nothing bro",
+        "Back to breakeven, glad my stop was up",
+        "Out flat on this one, no complaints",
+        "Back at entry, nothing gained nothing lost",
+        "Came back to entry bro, that happens",
+        "Out at breakeven, on to the next",
+        "Back to my entry, closed at nothing",
+        "Flat on that one, no worries bro",
+        "Back to entry level, out clean",
+        "Breakeven on this, next setup then",
+        "Came back on me, out at entry, all good",
     ],
 }
 
@@ -338,7 +337,14 @@ def alert_message(level):
             "- Never mention joining, subscribing, links, VIP or any service.\n"
             "- No emojis. No dashes of any kind, use commas or full stops.\n"
             "- No heading, no ticks, output the single line only.\n\n"
-            "Stick to what the price has done and what they could do about it. "
+            "STYLE: you are thinking out loud to your group, not instructing "
+            "them. Talk about what YOU are doing and what you reckon, not what "
+            "they should do. It should read like a quick text you fired off "
+            "without thinking about it. Short is better than clever.\n\n"
+            "Good examples of the register:\n"
+            "  20 pips bro, holding this one, lets see where it goes\n"
+            "  60 up now, happy to sit in this a bit longer\n"
+            "  Stop got me on that one bro, get it back on the next\n\n"
             "Vary the opening so it is not the same as last time.\n\n"
             "Context: " + brief
         )
@@ -516,23 +522,88 @@ def get_goldapi_price(pair):
     return None
 
 
-def get_twelvedata_price(pair):
-    """Twelve Data spot price. You already have a key from the Kevin bot."""
+# ── Twelve Data budget guard ──────────────────────────
+# Basic plan: 800 calls/day, 8/minute, and the Kevin bot shares this key.
+# We only spend a call to CONFIRM a message that is about to be posted,
+# never for routine polling. Reserve leaves headroom for the other bots.
+TD_DAILY_CAP = int(os.environ.get("TD_DAILY_CAP", "250"))
+TD_PER_MIN_CAP = 4
+td_budget = {"day": None, "used_today": 0, "minute": None, "used_minute": 0,
+             "last_error": None}
+td_lock = threading.Lock()
+
+
+def _td_allowed():
+    """True if we can afford a Twelve Data call right now."""
+    now = time.time()
+    day = time.strftime("%Y-%m-%d", time.gmtime(now))
+    minute = int(now // 60)
+    with td_lock:
+        if td_budget["day"] != day:
+            td_budget["day"] = day
+            td_budget["used_today"] = 0
+        if td_budget["minute"] != minute:
+            td_budget["minute"] = minute
+            td_budget["used_minute"] = 0
+        if td_budget["used_today"] >= TD_DAILY_CAP:
+            return False
+        if td_budget["used_minute"] >= TD_PER_MIN_CAP:
+            return False
+        td_budget["used_today"] += 1
+        td_budget["used_minute"] += 1
+        return True
+
+
+def get_twelvedata_price(pair, force=False):
+    """Twelve Data spot price. Budget guarded, confirmation use only."""
     if not TWELVE_DATA_KEY:
+        with td_lock:
+            td_budget["last_error"] = "TWELVE_DATA_KEY not set on this service"
+        return None
+    if not force and not _td_allowed():
+        with td_lock:
+            td_budget["last_error"] = "budget cap reached, skipped"
         return None
     try:
         symbol = "XAU/USD" if pair == "XAUUSD" else "BTC/USD"
         r = requests.get("https://api.twelvedata.com/price",
-                         params={"symbol": symbol, "apikey": TWELVE_DATA_KEY},
-                         timeout=6)
+                         params={"symbol": symbol,
+                                 "apikey": TWELVE_DATA_KEY.strip().strip('"').strip("'")},
+                         timeout=8)
+        body = r.json() if r.status_code == 200 else {}
+        # Twelve Data returns 200 with an error object when the quota is gone
+        if isinstance(body, dict) and body.get("status") == "error":
+            with td_lock:
+                td_budget["last_error"] = str(body.get("message"))[:200]
+            logger.warning(f"TwelveData error: {body.get('message')}")
+            return None
         if r.status_code == 200:
-            p = float(r.json().get("price", 0))
+            p = float(body.get("price", 0))
             if p > 0:
+                with td_lock:
+                    td_budget["last_error"] = None
                 return p
-        logger.warning(f"TwelveData {r.status_code}: {r.text[:120]}")
+            with td_lock:
+                td_budget["last_error"] = f"unexpected body: {str(body)[:150]}"
+        else:
+            with td_lock:
+                td_budget["last_error"] = f"HTTP {r.status_code}: {r.text[:150]}"
+            logger.warning(f"TwelveData {r.status_code}: {r.text[:120]}")
     except Exception as e:
+        with td_lock:
+            td_budget["last_error"] = f"request failed: {e}"
         logger.warning(f"TwelveData failed: {e}")
     return None
+
+
+def confirm_price(pair, watch_price):
+    """Called only when a message is about to go out. Spends one Twelve Data
+    call to verify the level really was reached. Falls back to the watch
+    price if Twelve Data is unavailable."""
+    td = get_twelvedata_price(pair)
+    if td is not None:
+        return td, "twelvedata"
+    return watch_price, "free feed"
 
 
 def get_price(pair):
@@ -540,9 +611,9 @@ def get_price(pair):
     if (mt5_prices.get(pair) is not None
             and (time.time() - mt5_prices["ts"]) <= MT5_FRESH_SECONDS):
         return mt5_prices[pair]
-    return (get_oanda_price(pair)
-            or get_twelvedata_price(pair)
-            or get_goldapi_price(pair))
+    # Routine polling uses only unmetered feeds. Twelve Data is reserved
+    # for confirming a level right before a message is posted.
+    return get_goldapi_price(pair) or get_oanda_price(pair)
 
 
 def pips_in_profit(pair, direction, anchor, current):
@@ -755,7 +826,13 @@ def monitor_profits():
                 # Stop loss first, it ends the trade
                 hit_sl = (price <= t["sl"]) if direction == "BUY" else (price >= t["sl"])
                 if hit_sl:
-                    logger.info(f"SL hit {tid} at {price}")
+                    cp, src = confirm_price(t["pair"], price)
+                    still = (cp <= t["sl"]) if direction == "BUY" else (cp >= t["sl"])
+                    if not still:
+                        logger.info(f"SL not confirmed on {tid} "
+                                    f"(watch {price}, {src} {cp}), holding")
+                        continue
+                    logger.info(f"SL hit {tid} at {cp} (confirmed by {src})")
                     close_trade(tid, "SL", reply_id)
                     continue
 
@@ -763,7 +840,14 @@ def monitor_profits():
                 if 20 in seen:
                     back = (price <= anchor) if direction == "BUY" else (price >= anchor)
                     if back:
-                        logger.info(f"Breakeven {tid} at {price}")
+                        cp, src = confirm_price(t["pair"], price)
+                        still = ((cp <= anchor) if direction == "BUY"
+                                 else (cp >= anchor))
+                        if not still:
+                            logger.info(f"BE not confirmed on {tid} "
+                                        f"(watch {price}, {src} {cp}), holding")
+                            continue
+                        logger.info(f"Breakeven {tid} at {cp} (confirmed by {src})")
                         close_trade(tid, "BE", reply_id)
                         continue
 
@@ -771,6 +855,15 @@ def monitor_profits():
                 for lvl in ALERT_LEVELS:
                     if pips < lvl or lvl in seen:
                         continue
+
+                    # Spend one Twelve Data call to confirm before posting
+                    cp, src = confirm_price(t["pair"], price)
+                    confirmed_pips = pips_in_profit(t["pair"], direction, anchor, cp)
+                    if confirmed_pips < lvl:
+                        logger.info(f"{lvl} not confirmed on {tid} "
+                                    f"(watch {pips}p, {src} {confirmed_pips}p), waiting")
+                        break
+                    logger.info(f"{lvl} confirmed by {src} at {confirmed_pips} pips")
 
                     fut = asyncio.run_coroutine_threadsafe(
                         send_to_telegram(alert_message(lvl), reply_to_id=reply_id), loop)
@@ -817,6 +910,7 @@ def health():
         f"OANDA {'key set' if OANDA_API_KEY else 'no key'}, "
         f"TwelveData {'key set' if TWELVE_DATA_KEY else 'no key'}, "
         f"free feed always on\n"
+        f"TD confirmations used today: {td_budget['used_today']}/{TD_DAILY_CAP}\n"
         f"Claude wording: {'on' if ANTHROPIC_API_KEY else 'off, using fallbacks'}\n"
         f"Source channel: {SOURCE_CHANNEL_ID or 'not set, webhook only'}\n"
         f"Target group: {TARGET_GROUP_ID or 'not set'}\n"
@@ -891,8 +985,10 @@ def price_check():
                  + (f"  ({age:.0f}s ago, {'fresh' if fresh else 'stale'})"
                     if age is not None else ""))
     lines.append(f"OANDA:        {oanda if oanda is not None else 'none'}")
-    td = get_twelvedata_price(pair)
+    td = get_twelvedata_price(pair, force=True)
     lines.append(f"Twelve Data:  {td if td is not None else 'none'}")
+    if td is None and td_budget["last_error"]:
+        lines.append(f"  TD error: {td_budget['last_error']}")
     backup = get_goldapi_price(pair)
     lines.append(f"Free feed:    {backup if backup is not None else 'none'}")
     lines.append("")
@@ -917,7 +1013,10 @@ def price_check():
         using = "free feed"
     else:
         using = "NOTHING"
-    lines.append(f"Bot will use: {using}")
+    lines.append(f"Bot will use (routine watching): {using}")
+    lines.append(f"Confirms with Twelve Data before posting: "
+                 f"{'yes' if TWELVE_DATA_KEY else 'no key set'}")
+    lines.append(f"TD budget: {td_budget['used_today']}/{TD_DAILY_CAP} today")
 
     if using == "NOTHING":
         lines.append("")
