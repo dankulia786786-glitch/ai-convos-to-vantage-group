@@ -473,7 +473,11 @@ def parse_signal(text):
 
 
 def build_trade(sig):
-    pair, direction, base = sig["pair"], sig["direction"], sig["entry"]
+    pair, direction = sig["pair"], sig["direction"]
+
+    # Round the entry to a whole number so every level posted is clean.
+    # TP and SL are whole point distances, so they come out whole too.
+    base = float(round(sig["entry"]))
 
     # anchor = the worst fill in the entry band, so every pip figure we
     # post is one the slowest filled follower actually got.
@@ -487,7 +491,7 @@ def build_trade(sig):
         tp, sl = anchor - TP_POINTS, anchor + SL_POINTS
 
     name = "gold" if pair == "XAUUSD" else "bitcoin"
-    dec = 2 if pair == "XAUUSD" else 1
+    dec = 0   # whole numbers only, easier to read at a glance
 
     post = entry_message(name, direction, elow, ehigh, tp, sl, dec)
 
@@ -637,6 +641,14 @@ def confirm_price(pair, watch_price):
     return watch_price, "free feed"
 
 
+def _round_price(pair, value):
+    """Live price used for monitoring. Kept at 2 decimals so pip counting
+    stays accurate. The levels POSTED are whole numbers, set in build_trade."""
+    if value is None:
+        return None
+    return round(value, 2) if pair == "XAUUSD" else round(value, 1)
+
+
 def get_price(pair):
     """MT5 first (your real broker), then OANDA, Twelve Data, free feed."""
     if (mt5_prices.get(pair) is not None
@@ -759,7 +771,8 @@ def schedule_delayed_entry(pair, direction):
                     logger.info(f"{pair} already open after delay, skipping")
                     return
 
-            sig = {"pair": pair, "direction": direction, "entry": round(price, 2)}
+            sig = {"pair": pair, "direction": direction,
+                   "entry": _round_price(pair, price)}
             asyncio.run_coroutine_threadsafe(
                 open_trade_from_signal(sig), loop).result(timeout=40)
             logger.info(f"Delayed entry taken on {pair} at {price}")
@@ -1031,7 +1044,8 @@ def webhook():
 
         # No delay configured: take it straight away at the signal price
         if ENTRY_DELAY_MAX <= 0:
-            sig = {"pair": pair, "direction": direction, "entry": price}
+            sig = {"pair": pair, "direction": direction,
+                   "entry": _round_price(pair, price)}
             tid = asyncio.run_coroutine_threadsafe(
                 open_trade_from_signal(sig), loop).result(timeout=30)
             return jsonify({"status": "ok", "trade_id": tid}), 200
@@ -1076,16 +1090,19 @@ def price_check():
     fresh = (mt5_val is not None and age is not None and age <= MT5_FRESH_SECONDS)
 
     lines = [f"Pair: {pair}"]
-    lines.append(f"MT5 feed: {mt5_val if mt5_val is not None else 'none yet'}"
+    lines.append(f"MT5 feed: {_fmt(mt5_val) if mt5_val is not None else 'none yet'}"
                  + (f"  ({age:.0f}s ago, {'fresh' if fresh else 'stale'})"
                     if age is not None else ""))
-    lines.append(f"OANDA:        {oanda if oanda is not None else 'none'}")
+    def _fmt(v):
+        return f"{v:.2f}" if v is not None else "none"
+
+    lines.append(f"OANDA:        {_fmt(oanda)}")
     td = get_twelvedata_price(pair, force=True)
-    lines.append(f"Twelve Data:  {td if td is not None else 'none'}")
+    lines.append(f"Twelve Data:  {_fmt(td)}")
     if td is None and td_budget["last_error"]:
         lines.append(f"  TD error: {td_budget['last_error']}")
     backup = get_goldapi_price(pair)
-    lines.append(f"Free feed:    {backup if backup is not None else 'none'}")
+    lines.append(f"Free feed:    {_fmt(backup)}")
     lines.append("")
 
     size = PIP_SIZE.get(pair, 0.1)
@@ -1100,12 +1117,10 @@ def price_check():
 
     if fresh:
         using = "MT5 (your broker, most accurate)"
-    elif oanda:
-        using = "OANDA"
-    elif td:
-        using = "Twelve Data"
     elif backup:
         using = "free feed"
+    elif oanda:
+        using = "OANDA"
     else:
         using = "NOTHING"
     lines.append(f"Bot will use (routine watching): {using}")
@@ -1246,7 +1261,8 @@ def test_signal():
             if not entry:
                 return "No price available, pass &entry=4044.50", 500
 
-        sig = {"pair": pair, "direction": direction, "entry": entry}
+        sig = {"pair": pair, "direction": direction,
+               "entry": _round_price(pair, entry)}
         fut = asyncio.run_coroutine_threadsafe(open_trade_from_signal(sig), loop)
         tid = fut.result(timeout=30)
 
