@@ -479,16 +479,24 @@ def build_trade(sig):
     # TP and SL are whole point distances, so they come out whole too.
     base = float(round(sig["entry"]))
 
-    # anchor = the worst fill in the entry band, so every pip figure we
-    # post is one the slowest filled follower actually got.
+    # anchor = the worst fill in the entry band. Every pip figure we post
+    # is measured from there, so it is a number the slowest filled
+    # follower actually got.
+    #
+    # The stop is measured from the OTHER edge, the one nearest the stop,
+    # so that everyone in the band gets the full SL_POINTS of room. If it
+    # were measured from the anchor, whoever filled at the far edge would
+    # be stopped out early through no fault of their own.
     if direction == "BUY":
         elow, ehigh = base, base + ENTRY_WIDEN
-        anchor = ehigh
-        tp, sl = anchor + TP_POINTS, anchor - SL_POINTS
+        anchor = ehigh                      # worst buy fill is the higher price
+        tp = anchor + TP_POINTS
+        sl = elow - SL_POINTS               # 6 points below the lowest entry
     else:
         elow, ehigh = base - ENTRY_WIDEN, base
-        anchor = elow
-        tp, sl = anchor - TP_POINTS, anchor + SL_POINTS
+        anchor = elow                       # worst sell fill is the lower price
+        tp = anchor - TP_POINTS
+        sl = ehigh + SL_POINTS              # 6 points above the highest entry
 
     name = "gold" if pair == "XAUUSD" else "bitcoin"
     dec = 0   # whole numbers only, easier to read at a glance
