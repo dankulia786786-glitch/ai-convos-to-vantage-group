@@ -5,6 +5,7 @@ import threading
 import logging
 import time
 import random
+import json
 from flask import Flask, request, jsonify
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
@@ -53,7 +54,8 @@ PIP_SIZE = {"XAUUSD": 0.10, "BTCUSD": 1.0}
 
 ALERT_LEVELS = [20, 60, 100, 200]   # 200 = TP hit, closes the trade
 
-TRADE_EXPIRY_SECONDS = 10800        # auto clear after 3h with no result
+TRADE_EXPIRY_SECONDS = int(os.environ.get("TRADE_EXPIRY_SECONDS", "7200"))
+# 7200 = 2 hours. Trade clears itself if nothing has resolved by then.
 
 # Terry posts a few minutes after the signal, at whatever the price is then.
 # The entry differs from the other account because he genuinely entered later,
@@ -69,6 +71,60 @@ loop = asyncio.new_event_loop()
 active_trades = {}
 reported_levels = {}
 trade_lock = threading.Lock()
+
+# Open trades are written to disk so a redeploy or a crash does not lose
+# them. Without this the group sees an entry and then silence, because the
+# monitor forgets the trade ever existed. Needs a Railway volume on /data.
+STATE_FILE = os.environ.get("STATE_FILE", "/data/terry_trades.json")
+STATE_FALLBACK = "/tmp/terry_trades.json"
+
+
+def _state_paths():
+    return [STATE_FILE, STATE_FALLBACK]
+
+
+def save_state():
+    """Called after every change. Cheap, the file is tiny."""
+    try:
+        payload = json.dumps({
+            "trades": active_trades,
+            "reported": {k: sorted(str(x) for x in v)
+                         for k, v in reported_levels.items()},
+        })
+    except Exception as e:
+        logger.error(f"State serialise failed: {e}")
+        return
+    for path in _state_paths():
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                f.write(payload)
+            return
+        except Exception as e:
+            logger.warning(f"State save failed {path}: {e}")
+
+
+def load_state():
+    """Restore open trades on startup so tracking carries on uninterrupted."""
+    for path in _state_paths():
+        try:
+            if not os.path.exists(path):
+                continue
+            with open(path) as f:
+                data = json.load(f)
+            trades = data.get("trades", {})
+            reported = data.get("reported", {})
+            if not isinstance(trades, dict):
+                continue
+            active_trades.update(trades)
+            for k, v in reported.items():
+                reported_levels[k] = {int(x) if str(x).isdigit() else x
+                                      for x in v}
+            if trades:
+                logger.info(f"Restored {len(trades)} open trade(s) from {path}")
+            return
+        except Exception as e:
+            logger.warning(f"State load failed {path}: {e}")
 last_channel_msgs = []
 last_sent_texts = []      # anti repeat guard
 
@@ -125,9 +181,9 @@ HEADINGS = {
 }
 
 LEVEL_BRIEF = {
-    20: ("price is 20 pips your way. You are just talking to the group about "
-         "it. Say you are holding, or thinking about the stop, and see where "
-         "it goes. Casual thinking out loud, not instructions."),
+    20: ("price is 20 pips your way. You MUST say that you are moving your "
+         "stop loss to your entry, so the trade is now risk free. That part "
+         "is essential, never leave it out. Keep it casual and natural."),
     60: ("price is 60 pips your way and still moving. Just talking about it. "
          "Say it is going well and you are staying in, or watching it."),
     100: ("price is 100 pips your way, halfway to your target. Just talking "
@@ -142,21 +198,21 @@ LEVEL_BRIEF = {
 
 FALLBACK_LINE = {
     20: [
-        "20 pips bro, holding this one, lets see where it goes",
-        "20 up already, happy with that start",
-        "20 pips in, staying in this for now",
-        "Nice, 20 up bro, letting it breathe a bit",
-        "20 pips your way, moving my stop to entry",
-        "20 in profit, going nowhere yet, holding",
-        "20 up bro, sitting tight on this one",
-        "That is 20, stop coming to entry for me",
-        "20 pips, decent start, see what it does now",
-        "20 onside, holding, no rush here",
-        "20 up bro, this one looks like it wants more",
-        "20 in, tucking my stop up to entry",
-        "20 pips your way, staying with it",
-        "20 up, quietly happy with this so far",
-        "20 in profit bro, letting it run a bit",
+        "20 pips bro, moving my stop to entry, risk free now",
+        "20 up already, stop is going to my entry",
+        "20 pips in, shifting my stop to entry so it costs me nothing",
+        "Nice, 20 up bro, stop to entry and letting it run",
+        "20 pips your way, moving my stop to entry now",
+        "20 in profit, stop to my entry, free trade from here",
+        "20 up bro, stop is at my entry now, nothing to lose",
+        "That is 20, moving my stop up to entry",
+        "20 pips, stop going to entry, riding it free now",
+        "20 onside, stop to entry for me, holding",
+        "20 up bro, stop at entry now, see where it takes us",
+        "20 in, tucking my stop up to my entry",
+        "20 pips your way, stop to entry, no risk left on it",
+        "20 up, moving my stop to entry and staying in",
+        "20 in profit bro, stop is at entry, letting it run",
     ],
     60: [
         "60 up now bro, happy to sit in this a bit longer",
@@ -335,6 +391,15 @@ def alert_message(level):
             "Context: " + brief
         )
         if candidate and _not_a_repeat(candidate):
+            # the 20 pip message must always mention the stop going to entry
+            if level == 20:
+                low = candidate.lower()
+                mentions_stop = ("stop" in low or "sl" in low)
+                mentions_entry = ("entry" in low or "break even" in low
+                                  or "breakeven" in low or "risk free" in low)
+                if not (mentions_stop and mentions_entry):
+                    logger.info("20 pip line missing stop to entry, rejected")
+                    continue
             line = candidate
             break
 
@@ -748,6 +813,7 @@ async def open_trade_from_signal(sig):
     with trade_lock:
         active_trades[tid] = trade
         reported_levels[tid] = set()
+        save_state()
 
     logger.info(f"Opened {tid} {sig['direction']} {sig['pair']} @ {sig['entry']}")
     return tid
@@ -893,6 +959,7 @@ def close_trade(tid, level, reply_id):
     with trade_lock:
         active_trades.pop(tid, None)
         reported_levels.pop(tid, None)
+        save_state()
 
 
 def monitor_profits():
@@ -907,7 +974,10 @@ def monitor_profits():
                 for tid in stale:
                     active_trades.pop(tid, None)
                     reported_levels.pop(tid, None)
-                    logger.info(f"Auto cleared {tid} after 3h")
+                    logger.info(f"Auto cleared {tid} after "
+                                f"{TRADE_EXPIRY_SECONDS // 3600}h")
+                if stale:
+                    save_state()
                 snapshot = dict(active_trades)
 
             for tid, t in snapshot.items():
@@ -973,6 +1043,7 @@ def monitor_profits():
                             with trade_lock:
                                 if tid in reported_levels:
                                     reported_levels[tid].add(lvl)
+                                save_state()
                             logger.info(f"{lvl} pips alert sent ({tid})")
                     except Exception as e:
                         logger.error(f"Alert send failed: {e}")
@@ -982,6 +1053,7 @@ def monitor_profits():
                         with trade_lock:
                             active_trades.pop(tid, None)
                             reported_levels.pop(tid, None)
+                            save_state()
                         logger.info(f"TP hit, closed {tid}")
                         break
 
@@ -991,6 +1063,7 @@ def monitor_profits():
         time.sleep(10)
 
 
+load_state()
 threading.Thread(target=monitor_profits, daemon=True).start()
 
 
@@ -1097,13 +1170,13 @@ def price_check():
     mt5_val = mt5_prices.get(pair)
     fresh = (mt5_val is not None and age is not None and age <= MT5_FRESH_SECONDS)
 
-    lines = [f"Pair: {pair}"]
-    lines.append(f"MT5 feed: {_fmt(mt5_val) if mt5_val is not None else 'none yet'}"
-                 + (f"  ({age:.0f}s ago, {'fresh' if fresh else 'stale'})"
-                    if age is not None else ""))
     def _fmt(v):
         return f"{v:.2f}" if v is not None else "none"
 
+    lines = [f"Pair: {pair}"]
+    lines.append(f"MT5 feed:     {_fmt(mt5_val) if mt5_val is not None else 'none yet'}"
+                 + (f"  ({age:.0f}s ago, {'fresh' if fresh else 'stale'})"
+                    if age is not None else ""))
     lines.append(f"OANDA:        {_fmt(oanda)}")
     td = get_twelvedata_price(pair, force=True)
     lines.append(f"Twelve Data:  {_fmt(td)}")
@@ -1249,6 +1322,7 @@ def reset():
         n = len(active_trades)
         active_trades.clear()
         reported_levels.clear()
+        save_state()
     last_sent_texts.clear()
     return f"Cleared {n} trades", 200
 
