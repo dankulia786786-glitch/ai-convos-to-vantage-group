@@ -1219,6 +1219,47 @@ def price_check():
     return "\n".join(lines), 200
 
 
+@app.route("/my_chats", methods=["GET"])
+def my_chats():
+    """Every group and channel this account is in, with the correct IDs.
+    Optional ?q=vantage to filter by name."""
+    q = request.args.get("q", "").lower()
+    out = []
+
+    async def _list():
+        if not client or not await client.is_user_authorized():
+            out.append("Client not connected.")
+            return
+        try:
+            async for d in client.iter_dialogs(limit=200):
+                if not (d.is_group or d.is_channel):
+                    continue
+                name = d.name or "(no name)"
+                if q and q not in name.lower():
+                    continue
+                ent = d.entity
+                kind = "channel" if getattr(ent, "broadcast", False) else "group"
+                forum = " [topics]" if getattr(ent, "forum", False) else ""
+                out.append(f"{d.id}   {kind}{forum}   {name}")
+        except Exception as e:
+            out.append(f"Failed to list: {e}")
+
+    try:
+        asyncio.run_coroutine_threadsafe(_list(), loop).result(timeout=60)
+    except Exception as e:
+        out.append(f"Error: {e}")
+
+    if not out:
+        out.append("No groups or channels found for this account.")
+        out.append("Terry may not be a member of anything yet.")
+
+    header = ("Groups and channels this account can post to.\n"
+              "Copy the id on the left into TARGET_GROUP_ID exactly as shown.\n"
+              "A supergroup id looks like -1001234567890.\n"
+              + "-" * 60)
+    return header + "\n" + "\n".join(out), 200
+
+
 @app.route("/diag_send", methods=["GET"])
 def diag_send():
     """Why did the send fail? Checks the account, the group and the topic."""
